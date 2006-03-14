@@ -1,0 +1,34 @@
+INSTALL
+=======
+
+Modify the Makefile to fit your system, especially the path to the Asterisk 
+include files.
+
+To build the driver you will need an installed CAPI system, including header 
+files.
+
+To build the channel driver on LINUX
+------------------------------------
+make
+make install
+
+# 
+# the following command will install
+# the sample configuration files
+#
+# make config
+#
+
+To build the channel driver on FreeBSD/NetBSD:
+----------------------------------------------
+gmake
+gmake install
+
+# 
+# the following command will install
+# the sample configuration files
+#
+# gmake config
+#
+
+
