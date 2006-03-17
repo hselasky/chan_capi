@@ -2073,6 +2073,7 @@ cd_alloc(struct cc_capi_application *p_app, u_int16_t plci)
 
     cd->msg_plci = plci;
     cd->digit_time_last = p_app->application_uptime;
+    cd->rx_buffer_qlen = 416; /* assume that the buffer is empty */
 
     cc_mutex_lock(&capi_global_lock);
     cd->support = plci_to_controller(plci)->support; /* copy support bits */
