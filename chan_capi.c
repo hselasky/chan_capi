@@ -167,7 +167,7 @@ soft_echo_cancel_get_factor(struct soft_echo_cancel *rx,
     u_int32_t tx_power = tx->power_avg[tx->offset];
     int32_t factor = 0;
 
-    if ((tx_power >= (rx_power / 2)) && 
+    if ((tx_power >= (rx_power / 4)) && 
 	(tx->stuck < EC_STUCK_OFFSET)) {
 
         factor = (tx_power >> 13);
