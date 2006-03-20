@@ -163,16 +163,23 @@ soft_echo_cancel_get_factor(struct soft_echo_cancel *rx,
 			    struct soft_echo_cancel *tx)
 {
     u_int32_t rx_power = rx->power_avg[rx->offset];
-    u_int32_t tx_power = tx->power_avg[tx->offset];
+    u_int32_t tx_power = (tx->stuck < EC_STUCK_OFFSET) ? tx->power_avg[tx->offset] : 0;
     int32_t factor = 0;
 
-    if ((tx_power >= (rx_power / 4)) && 
-	(tx->stuck < EC_STUCK_OFFSET)) {
+    if (tx_power >= rx_power) {
 
-        factor = (tx_power >> 13);
+        /* activate echo canceller */
 
-	if (factor > (0xFF-8)) {
-	    factor = (0xFF-8);
+        tx_power /= (rx_power ? rx_power : 1);
+
+	if (tx_power > 0xFFFF) {
+	    tx_power = 0xFFFF;
+	}
+
+        factor = (4*tx_power);
+
+	if (factor > 0xFF) {
+	    factor = 0xFF;
 	}
     }
 
@@ -180,13 +187,14 @@ soft_echo_cancel_get_factor(struct soft_echo_cancel *rx,
         rx->active = 0;
     } else {
         if(tx->active) {
-	  if(factor > 0x10) {
-	     factor = 0x10; /* just reduce the sound a little */
-	  }
+	  factor = 0;
 	} else {
 	  rx->active = 1;
 	}
     }
+#if 0
+    cc_log(LOG_NOTICE, "%s %d\n", (rx > tx) ? "  " : "", rx->active);
+#endif
     return factor;
 }
 
