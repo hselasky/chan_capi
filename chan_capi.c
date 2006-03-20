@@ -1,5 +1,4 @@
 /*-
- *
  * Copyright (c) 2006 Hans Petter Selasky. All rights reserved.
  * Copyright (C) 2005 Cytronics & Melware, Armin Schindler
  * Copyright (C) 2002-2005 Junghanns.NET GmbH, Klaus-Peter Junghanns
@@ -1002,6 +1001,35 @@ cep_root_release()
      * should do some cleanup, update config ...
      */
     cc_mutex_unlock(&capi_global_lock);
+    return;
+}
+
+static void
+cep_queue_last(struct config_entry_iface *cep_last)
+{
+    struct config_entry_iface *ce_p;
+    struct config_entry_iface **ce_pp;
+
+    cc_mutex_assert(&capi_global_lock, MA_OWNED);
+
+    ce_p = cep_root_ptr;
+    ce_pp = &cep_root_ptr;
+    while(ce_p)
+    {
+        if(ce_p == cep_last) {
+	    /* remove entry */
+	    ce_pp[0] = ce_p->next;
+	    ce_p = ce_p->next;
+	} else {
+	    /* get next entry */
+	    ce_pp = &(ce_p->next);
+	    ce_p = ce_p->next;
+	}
+    }
+
+    /* insert last */
+    ce_pp[0] = cep_last;
+    cep_last->next = NULL;
     return;
 }
 
@@ -3339,6 +3367,10 @@ chan_capi_request(const char *type, const struct ast_codec_pref *formats,
 		    /* DIAL(CAPI/gX/...) */
 		    if (interface[0] == 'g') {
 		        if(cep->group & capigroup) {
+			    /* perform round robin on 
+			     * the configuration entries:
+			     */
+			    cep_queue_last(cep);
 			    break;
 			}
 		    } else {
