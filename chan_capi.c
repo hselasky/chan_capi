@@ -158,31 +158,83 @@ extern const char *capi_info_string(u_int16_t wInfo);
  * software echo cancelling
  *===========================================================================*/
 
+/* routine to compute the square root */
+
+u_int16_t 
+sqrt_32(u_int32_t a) {
+    u_int32_t b = 0x40000000;
+    u_int32_t x = 0x40000000;
+
+    while(1) {
+
+        if(a >= b) {
+
+	   a -= b;
+
+	   if(b & 1) {
+	      b >>= 1;
+	      b |= x;
+	      break;
+	   }
+	   b >>= 1;
+	   b |= x;
+	   x >>= 1;
+	   b ^= x;
+	   x >>= 1;
+	   b ^= x;
+
+	} else {
+
+	   if(b & 1) {
+	      b >>= 1;
+	      break;
+	   }
+	   b >>= 1;
+	   x >>= 1;
+	   b ^= x;
+	   x >>= 1;
+	   b ^= x;
+	}
+    }
+    return b;
+}
+
+#define EC_FACTOR_MAX 0x100
+
 static int32_t
 soft_echo_cancel_get_factor(struct soft_echo_cancel *rx,
 			    struct soft_echo_cancel *tx)
 {
-    u_int32_t rx_power = rx->power_avg[rx->offset];
-    u_int32_t tx_power = (tx->stuck < EC_STUCK_OFFSET) ? tx->power_avg[tx->offset] : 0;
-    int32_t factor = 0;
+    u_int16_t rx_power = rx->power_avg[rx->offset];
+    u_int16_t tx_power = ((tx->stuck < EC_STUCK_OFFSET) ? 
+			  tx->power_avg[tx->offset] : 0);
+    int32_t factor;
 
-    if (tx_power >= rx_power) {
+    factor  = tx_power;
+    factor *= 64;
 
-        /* activate echo canceller */
+    if ((factor > rx_power) &&
+	(tx_power > 32)) {
 
-        tx_power /= (rx_power ? rx_power : 1);
+        /* activate the echo canceller
+	 *
+	 * NOTE: typical "rx_power:tx_power" 
+	 * ratio when only echo is received 
+	 * is 1:32
+	 */
+	factor /= (rx_power ? rx_power : 1);
 
-	if (tx_power > 0xFFFF) {
-	    tx_power = 0xFFFF;
+	if (factor > (EC_FACTOR_MAX-1)) {
+	    factor = (EC_FACTOR_MAX-1);
 	}
-
-        factor = (4*tx_power);
-
-	if (factor > 0xFF) {
-	    factor = 0xFF;
+	if (factor < 4) {
+	    factor = 0;
 	}
+    } else {
+      factor = 0;
     }
 
+#if 0
     if (factor == 0) {
         rx->active = 0;
     } else {
@@ -192,19 +244,27 @@ soft_echo_cancel_get_factor(struct soft_echo_cancel *rx,
 	  rx->active = 1;
 	}
     }
+#endif
+
 #if 0
-    cc_log(LOG_NOTICE, "%s %d\n", (rx > tx) ? "  " : "", rx->active);
+    cc_log(LOG_NOTICE, "%s r0x%04x t0x%04x f0x%04x a%d\n", 
+	   (rx > tx) ? "                          " : "", 
+	   rx_power, tx_power, factor, rx->active);
 #endif
     return factor;
 }
 
 static void
 soft_echo_cancel_process(struct call_desc *cd, struct soft_echo_cancel *rx, 
-			 struct soft_echo_cancel *tx, u_int8_t *ptr, u_int16_t len)
+			 struct soft_echo_cancel *tx, u_int8_t *ptr, 
+			 u_int16_t len)
 {
     int32_t pbx_capability = cd->pbx_capability;
-    int32_t factor = soft_echo_cancel_get_factor(rx, tx);
+    int32_t sound_factor = soft_echo_cancel_get_factor(rx, tx);
+    int32_t noise_factor = ((tx->stuck < EC_STUCK_OFFSET) ? 
+			    tx->power_avg[tx->offset] : 0) / 256;
     int32_t temp;
+    int32_t white_noise;
     u_int16_t x;
     u_int16_t y;
 
@@ -220,9 +280,32 @@ soft_echo_cancel_process(struct call_desc *cd, struct soft_echo_cancel *rx,
 
 	rx->power_acc += (temp * temp) / EC_WINDOW_LEN;
 
-	if (factor) {
+	if (sound_factor) {
 
-	    temp = (temp * (256-factor)) / 256;
+	    /* simple prime white noise generator */
+
+	    white_noise = cd->white_noise_rem;
+
+	    if (white_noise & 1) {
+	        white_noise += EC_NOISE_PRIME;
+	    }
+	    white_noise /= 2;
+
+	    cd->white_noise_rem = white_noise;
+
+	    /* convert unsigned to signed */
+
+	    white_noise ^= 0x800000;
+	    if(white_noise & 0x800000) {
+	       white_noise |= (-0x800000);
+	    }
+
+	    white_noise /= 256;
+	    white_noise *= noise_factor;
+	    white_noise /= 65536;
+
+	    temp = (temp * ((EC_FACTOR_MAX-1) - sound_factor)) / EC_FACTOR_MAX;
+	    temp += (white_noise * sound_factor) / EC_FACTOR_MAX;
 
 	    if (pbx_capability == AST_FORMAT_ULAW) {
 	        *ptr = capi_signed_to_ulaw(temp);
@@ -234,7 +317,7 @@ soft_echo_cancel_process(struct call_desc *cd, struct soft_echo_cancel *rx,
 	rx->samples++;
 	if (rx->samples >= EC_WINDOW_LEN) {
 
-	    /* increase stuck variable of peer */
+	    /* increase stuck variable of the peer */
 
 	    if(tx->stuck != 0xFF) {
 	       tx->stuck++;
@@ -253,9 +336,13 @@ soft_echo_cancel_process(struct call_desc *cd, struct soft_echo_cancel *rx,
 
 	    /* get next value */
 
-	    factor = soft_echo_cancel_get_factor(rx, tx);
+	    sound_factor = soft_echo_cancel_get_factor(rx, tx);
 
-	    /* store RX power in peer */
+	    /* square root the accumulated power */
+
+	    rx->power_acc = sqrt_32(rx->power_acc);
+
+	    /* store RX power */
 
 	    for(x = cd->options.echo_cancel_offset; x--; ) {
 
@@ -2110,6 +2197,7 @@ cd_alloc(struct cc_capi_application *p_app, u_int16_t plci)
     cd->msg_plci = plci;
     cd->digit_time_last = p_app->application_uptime;
     cd->rx_buffer_qlen = 416; /* assume that the buffer is empty */
+    cd->white_noise_rem = 1;
 
     cc_mutex_lock(&capi_global_lock);
     cd->support = plci_to_controller(plci)->support; /* copy support bits */

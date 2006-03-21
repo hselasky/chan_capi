@@ -408,14 +408,15 @@ struct config_entry_iface {
 
 /* software echo cancellation */
 
-#define EC_WINDOW_LEN    (1<<8) /* bytes, 32 millisecond (one window) */
-#define EC_WINDOW_COUNT     32  /* units */
-#define EC_POWER_OFFSET      8  /* windows */
-#define EC_STUCK_OFFSET     24  /* windows */
+#define EC_WINDOW_LEN      (1<<8) /* bytes, 32 millisecond (one window) */
+#define EC_WINDOW_COUNT       32  /* units */
+#define EC_POWER_OFFSET        8  /* windows */
+#define EC_STUCK_OFFSET       24  /* windows */
+#define EC_NOISE_PRIME  0xffff1d
 
 struct soft_echo_cancel {
   u_int32_t power_acc; /* total accumulated power */
-  u_int32_t power_avg[EC_WINDOW_COUNT]; /* average power */
+  u_int16_t power_avg[EC_WINDOW_COUNT]; /* average power */
   u_int16_t samples;   /* number of samples accumulated */
   u_int16_t offset;    /* current power average offset */
   u_int8_t  active : 1;
@@ -459,6 +460,9 @@ struct call_desc {
 
 	/*! CAPI time of last received digit */
 	u_int32_t digit_time_last;
+
+	/*! CAPI white noise generator remainder */
+	u_int32_t white_noise_rem;
 
 	/*! CAPI configuration entry pointer */
 	struct config_entry_iface *cep;
