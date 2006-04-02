@@ -305,6 +305,10 @@ struct cc_capi_options {
 	 */
 	u_int32_t echo_cancel_in_software : 1;
 
+	/* set if echo canceling has detected a FAX:
+	 */
+	u_int32_t echo_cancel_fax : 1;
+
 	/* set if DTMF detection should be done in software. 
 	 * Else in hardware:
 	 */

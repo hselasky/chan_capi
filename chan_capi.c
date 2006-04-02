@@ -202,7 +202,8 @@ sqrt_32(u_int32_t a) {
 #define EC_FACTOR_MAX 0x100
 
 static int32_t
-soft_echo_cancel_get_factor(struct soft_echo_cancel *rx,
+soft_echo_cancel_get_factor(struct call_desc *cd,
+			    struct soft_echo_cancel *rx,
 			    struct soft_echo_cancel *tx)
 {
     u_int16_t rx_power = rx->power_avg[rx->offset];
@@ -210,42 +211,50 @@ soft_echo_cancel_get_factor(struct soft_echo_cancel *rx,
 			  tx->power_avg[tx->offset] : 0);
     int32_t factor;
 
-    factor  = tx_power;
-    factor *= 64;
+    if(cd->options.echo_cancel_fax) {
 
-    if ((factor > rx_power) &&
-	(tx_power > 32)) {
+        /* assure simplex sound */
 
-        /* activate the echo canceller
-	 *
-	 * NOTE: typical "rx_power:tx_power" 
-	 * ratio when only echo is received 
-	 * is 1:32
-	 */
-	factor /= (rx_power ? rx_power : 1);
-
-	if (factor > (EC_FACTOR_MAX-1)) {
-	    factor = (EC_FACTOR_MAX-1);
+        if (tx_power > (rx_power/2)) {
+	    if(tx->active) {
+	      factor = 0x00;
+	    } else {
+	      rx->active = 1;
+	      factor = 0xFF;
+	    }
+	} else {
+	    factor = 0x00;
+	    rx->active = 0;
 	}
-	if (factor < 4) {
+
+    } else {
+
+        /* duplex sound */
+
+        factor  = tx_power;
+	factor *= 64;
+
+	if ((factor > rx_power) &&
+	    (tx_power > 32)) {
+
+	    /* activate the echo canceller
+	     *
+	     * NOTE: typical "rx_power:tx_power" 
+	     * ratio when only echo is received 
+	     * is 1:32
+	     */
+	    factor /= (rx_power ? rx_power : 1);
+
+	    if (factor > (EC_FACTOR_MAX-1)) {
+	        factor = (EC_FACTOR_MAX-1);
+	    }
+	    if (factor < 4) {
+	        factor = 0;
+	    }
+	} else {
 	    factor = 0;
 	}
-    } else {
-      factor = 0;
     }
-
-#if 0
-    if (factor == 0) {
-        rx->active = 0;
-    } else {
-        if(tx->active) {
-	  factor = 0;
-	} else {
-	  rx->active = 1;
-	}
-    }
-#endif
-
 #if 0
     cc_log(LOG_NOTICE, "%s r0x%04x t0x%04x f0x%04x a%d\n", 
 	   (rx > tx) ? "                          " : "", 
@@ -284,16 +293,23 @@ soft_echo_cancel_process(struct call_desc *cd, struct soft_echo_cancel *rx,
 			 u_int16_t len)
 {
     int32_t pbx_capability = cd->pbx_capability;
-    int32_t sound_factor = soft_echo_cancel_get_factor(rx, tx);
+    int32_t sound_factor = soft_echo_cancel_get_factor(cd, rx, tx);
     int32_t noise_factor = ((tx->stuck < EC_STUCK_OFFSET) ? 
 			    tx->power_avg[tx->offset] : 0) / 256;
     int32_t temp;
     int32_t white_noise;
     u_int16_t x;
     u_int16_t y;
+    u_int8_t silence;
 
     /* clear the stuck variable */
     rx->stuck = 0;
+
+    if (pbx_capability == AST_FORMAT_ULAW) {
+        silence = capi_signed_to_ulaw(0);
+    } else {
+        silence = capi_signed_to_alaw(0);
+    }
 
     while(len--) {
         if (pbx_capability == AST_FORMAT_ULAW) {
@@ -335,7 +351,11 @@ soft_echo_cancel_process(struct call_desc *cd, struct soft_echo_cancel *rx,
 	    white_noise *= noise_factor;
 	    white_noise /= 65536;
 
-	    temp = (temp * ((EC_FACTOR_MAX-1) - sound_factor)) / EC_FACTOR_MAX;
+	    if(sound_factor >= 0xFF)
+	      temp = silence;
+	    else
+	      temp = (temp * ((EC_FACTOR_MAX-1) - sound_factor)) / EC_FACTOR_MAX;
+
 	    temp += (white_noise * sound_factor) / EC_FACTOR_MAX;
 
 	    if (pbx_capability == AST_FORMAT_ULAW) {
@@ -361,10 +381,13 @@ soft_echo_cancel_process(struct call_desc *cd, struct soft_echo_cancel *rx,
 	    if(temp >= 0x1000)
 	    {
 	        /* disable the echo canceller */
-	        cd->options.echo_cancel_in_software = 0;
 
-		cd_verbose(cd, 1, 0, 3, "FAX tone detected, "
-			   "disabling echo supressor!\n");
+	        if(cd->options.echo_cancel_fax == 0) {
+		   cd->options.echo_cancel_fax = 1;
+
+		   cd_verbose(cd, 1, 0, 3, "FAX tone detected, "
+			      "switching echo supressor!\n");
+		}
 	    }
 
 	    rx->sincos_2100_count = 0;
@@ -392,10 +415,6 @@ soft_echo_cancel_process(struct call_desc *cd, struct soft_echo_cancel *rx,
 	        rx->offset = 0;
 	    }
 
-	    /* get next value */
-
-	    sound_factor = soft_echo_cancel_get_factor(rx, tx);
-
 	    /* square root the accumulated power */
 
 	    rx->power_acc = sqrt_32(rx->power_acc);
@@ -410,6 +429,10 @@ soft_echo_cancel_process(struct call_desc *cd, struct soft_echo_cancel *rx,
 		 rx->power_avg[y] = rx->power_acc;
 	      }
 	    }
+
+	    /* get next value */
+
+	    sound_factor = soft_echo_cancel_get_factor(cd, rx, tx);
 
 	    rx->power_acc = 0;
 	    rx->samples = 0;
