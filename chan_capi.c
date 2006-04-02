@@ -254,6 +254,30 @@ soft_echo_cancel_get_factor(struct soft_echo_cancel *rx,
     return factor;
 }
 
+static const int16_t sin_2100_demux[80] = {
+  0, 516, -81, -503, 160, 478, -235, -441, 
+  304, 393, -366, -336, 419, 270, -461, -198, 
+  492, 120, -511, -40, 518, -40, -511, 120, 
+  492, -198, -461, 270, 419, -336, -366, 393, 
+  304, -441, -235, 478, 160, -503, -81, 516, 
+  0, -516, 81, 503, -160, -478, 235, 441, 
+  -304, -393, 366, 336, -419, -270, 461, 198, 
+  -492, -120, 511, 40, -518, 40, 511, -120, 
+  -492, 198, 461, -270, -419, 336, 366, -393, 
+  -304, 441, 235, -478, -160, 503, 81, -516, };
+
+static const int16_t cos_2100_demux[80] = {
+  518, -40, -511, 120, 492, -198, -461, 270, 
+  419, -336, -366, 393, 304, -441, -235, 478, 
+  160, -503, -81, 516, 0, -516, 81, 503, 
+  -160, -478, 235, 441, -304, -393, 366, 336, 
+  -419, -270, 461, 198, -492, -120, 511, 40, 
+  -518, 40, 511, -120, -492, 198, 461, -270, 
+  -419, 336, 366, -393, -304, 441, 235, -478, 
+  -160, 503, 81, -516, 0, 516, -81, -503, 
+  160, 478, -235, -441, 304, 393, -366, -336, 
+  419, 270, -461, -198, 492, 120, -511, -40, };
+
 static void
 soft_echo_cancel_process(struct call_desc *cd, struct soft_echo_cancel *rx, 
 			 struct soft_echo_cancel *tx, u_int8_t *ptr, 
@@ -278,7 +302,14 @@ soft_echo_cancel_process(struct call_desc *cd, struct soft_echo_cancel *rx,
 	  temp = capi_alaw_to_signed[*ptr];
 	}
 
+	/* sum up signal power */
+
 	rx->power_acc += (temp * temp) / EC_WINDOW_LEN;
+
+	/* demultiplex FAX tone */
+
+	rx->sin_2100_amp += temp * ((int32_t)(sin_2100_demux[rx->sincos_2100_count % 80]));
+	rx->cos_2100_amp += temp * ((int32_t)(cos_2100_demux[rx->sincos_2100_count % 80]));
 
 	if (sound_factor) {
 
@@ -312,6 +343,33 @@ soft_echo_cancel_process(struct call_desc *cd, struct soft_echo_cancel *rx,
 	    } else {
 	        *ptr = capi_signed_to_alaw(temp);
 	    }
+	}
+
+	rx->sincos_2100_count++;
+	if (rx->sincos_2100_count >= 800) {
+
+	    rx->sin_2100_amp /= 0x10000;
+	    rx->cos_2100_amp /= 0x10000;
+
+	    temp = sqrt_32((rx->sin_2100_amp*rx->sin_2100_amp) +
+			   (rx->cos_2100_amp*rx->cos_2100_amp));
+#if 0
+	    cc_log(LOG_NOTICE, "FAX amplitude: %s0x%08x\n", 
+		   (rx > tx) ? "                " : "",
+		   temp);
+#endif
+	    if(temp >= 0x1000)
+	    {
+	        /* disable the echo canceller */
+	        cd->options.echo_cancel_in_software = 0;
+
+		cd_verbose(cd, 1, 0, 3, "FAX tone detected, "
+			   "disabling echo supressor!\n");
+	    }
+
+	    rx->sincos_2100_count = 0;
+	    rx->sin_2100_amp = 0;
+	    rx->cos_2100_amp = 0;
 	}
 
 	rx->samples++;
