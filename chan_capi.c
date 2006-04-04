@@ -264,28 +264,28 @@ soft_echo_cancel_get_factor(struct call_desc *cd,
 }
 
 static const int16_t sin_2100_demux[80] = {
-  0, 516, -81, -503, 160, 478, -235, -441, 
-  304, 393, -366, -336, 419, 270, -461, -198, 
-  492, 120, -511, -40, 518, -40, -511, 120, 
-  492, -198, -461, 270, 419, -336, -366, 393, 
-  304, -441, -235, 478, 160, -503, -81, 516, 
-  0, -516, 81, 503, -160, -478, 235, 441, 
-  -304, -393, 366, 336, -419, -270, 461, 198, 
-  -492, -120, 511, 40, -518, 40, 511, -120, 
-  -492, 198, 461, -270, -419, 336, 366, -393, 
-  -304, 441, 235, -478, -160, 503, 81, -516, };
+  0x0000, 0x7f99, 0xebfb, 0x838b, 0x278d, 0x7640, 0xc5e5, 0x92de, 
+  0x4b3b, 0x6154, 0xa57f, 0xace0, 0x678d, 0x42e0, 0x8df5, 0xcf05, 
+  0x79bb, 0x1de1, 0x8195, 0xf5f6, 0x7fff, 0xf5f6, 0x8195, 0x1de1, 
+  0x79bb, 0xcf05, 0x8df5, 0x42e0, 0x678d, 0xace0, 0xa57f, 0x6154, 
+  0x4b3b, 0x92de, 0xc5e5, 0x7640, 0x278d, 0x838b, 0xebfb, 0x7f99, 
+  0x0000, 0x8067, 0x1405, 0x7c75, 0xd873, 0x89c0, 0x3a1b, 0x6d22, 
+  0xb4c5, 0x9eac, 0x5a81, 0x5320, 0x9873, 0xbd20, 0x720b, 0x30fb, 
+  0x8645, 0xe21f, 0x7e6b, 0x0a0a, 0x8001, 0x0a0a, 0x7e6b, 0xe21f, 
+  0x8645, 0x30fb, 0x720b, 0xbd20, 0x9873, 0x5320, 0x5a81, 0x9eac, 
+  0xb4c5, 0x6d22, 0x3a1b, 0x89c0, 0xd873, 0x7c75, 0x1405, 0x8067, };
 
 static const int16_t cos_2100_demux[80] = {
-  518, -40, -511, 120, 492, -198, -461, 270, 
-  419, -336, -366, 393, 304, -441, -235, 478, 
-  160, -503, -81, 516, 0, -516, 81, 503, 
-  -160, -478, 235, 441, -304, -393, 366, 336, 
-  -419, -270, 461, 198, -492, -120, 511, 40, 
-  -518, 40, 511, -120, -492, 198, 461, -270, 
-  -419, 336, 366, -393, -304, 441, 235, -478, 
-  -160, 503, 81, -516, 0, 516, -81, -503, 
-  160, 478, -235, -441, 304, 393, -366, -336, 
-  419, 270, -461, -198, 492, 120, -511, -40, };
+  0x7fff, 0xf5f6, 0x8195, 0x1de1, 0x79bb, 0xcf05, 0x8df5, 0x42e0, 
+  0x678d, 0xace0, 0xa57f, 0x6154, 0x4b3b, 0x92de, 0xc5e5, 0x7640, 
+  0x278d, 0x838b, 0xebfb, 0x7f99, 0x0000, 0x8067, 0x1405, 0x7c75, 
+  0xd873, 0x89c0, 0x3a1b, 0x6d22, 0xb4c5, 0x9eac, 0x5a81, 0x5320, 
+  0x9873, 0xbd20, 0x720b, 0x30fb, 0x8645, 0xe21f, 0x7e6b, 0x0a0a, 
+  0x8001, 0x0a0a, 0x7e6b, 0xe21f, 0x8645, 0x30fb, 0x720b, 0xbd20, 
+  0x9873, 0x5320, 0x5a81, 0x9eac, 0xb4c5, 0x6d22, 0x3a1b, 0x89c0, 
+  0xd873, 0x7c75, 0x1405, 0x8067, 0x0000, 0x7f99, 0xebfb, 0x838b, 
+  0x278d, 0x7640, 0xc5e5, 0x92de, 0x4b3b, 0x6154, 0xa57f, 0xace0, 
+  0x678d, 0x42e0, 0x8df5, 0xcf05, 0x79bb, 0x1de1, 0x8195, 0xf5f6, };
 
 static void
 soft_echo_cancel_process(struct call_desc *cd, struct soft_echo_cancel *rx, 
@@ -324,8 +324,13 @@ soft_echo_cancel_process(struct call_desc *cd, struct soft_echo_cancel *rx,
 
 	/* demultiplex FAX tone */
 
-	rx->sin_2100_amp += temp * ((int32_t)(sin_2100_demux[rx->sincos_2100_count % 80]));
-	rx->cos_2100_amp += temp * ((int32_t)(cos_2100_demux[rx->sincos_2100_count % 80]));
+	rx->sin_2100_amp += 
+	  (temp * ((int32_t)(sin_2100_demux[rx->sincos_2100_count % 80]))) /
+	  0x1000;
+
+	rx->cos_2100_amp += 
+	  (temp * ((int32_t)(cos_2100_demux[rx->sincos_2100_count % 80]))) /
+	  0x1000;
 
 	if (sound_factor) {
 
@@ -366,7 +371,7 @@ soft_echo_cancel_process(struct call_desc *cd, struct soft_echo_cancel *rx,
 	}
 
 	rx->sincos_2100_count++;
-	if (rx->sincos_2100_count >= 800) {
+	if (rx->sincos_2100_count >= 8000) {
 
 	    rx->sin_2100_amp /= 0x10000;
 	    rx->cos_2100_amp /= 0x10000;
@@ -378,7 +383,7 @@ soft_echo_cancel_process(struct call_desc *cd, struct soft_echo_cancel *rx,
 		   (rx > tx) ? "                " : "",
 		   temp);
 #endif
-	    if(temp >= 0x1000)
+	    if(temp >= 0x300)
 	    {
 	        /* disable the echo canceller */
 
