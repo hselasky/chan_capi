@@ -3642,6 +3642,7 @@ __chan_capi_call(struct call_desc *cd, const char *idest, int timeout)
 	char dstring[AST_MAX_EXTENSION];
 	char called[AST_MAX_EXTENSION];
 	char calling[AST_MAX_EXTENSION];
+	char second_calling[AST_MAX_EXTENSION];
 	char callerid[AST_MAX_EXTENSION];
 	char callingsubaddress[AST_MAX_EXTENSION];
 	char calledsubaddress[AST_MAX_EXTENSION];
@@ -3787,6 +3788,18 @@ __chan_capi_call(struct call_desc *cd, const char *idest, int timeout)
 	    CONNECT_REQ_CALLINGPARTYSUBADDRESS(&CMSG) = (_cstruct)callingsubaddress;
 	}
 
+#if ((CAPI_OS_HINT == 2) && (CAPI_STACK_VERSION >= 206))
+	if ((p = pbx_builtin_getvar_helper(pbx_chan, "SECONDCALLERID"))) {
+
+	    buffer[0] = callernplan;
+	    buffer[1] = 0x80 | (CLIR & 0x63);
+
+	    capi_build_struct(&second_calling, sizeof(second_calling),
+			      &buffer, 2, p, strlen(p), NULL, 0);
+
+	    CONNECT_REQ_SECONDCALLINGPARTYNUMBER(&CMSG) = (_cstruct)second_calling;
+	}
+#endif
 	CONNECT_REQ_B1PROTOCOL(&CMSG) = 1;
 	CONNECT_REQ_B2PROTOCOL(&CMSG) = 1;
 	CONNECT_REQ_B3PROTOCOL(&CMSG) = 0;
