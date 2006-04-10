@@ -3106,14 +3106,14 @@ capi_send_disconnect_b3_req(struct call_desc *cd)
 }
 
 static u_int16_t
-capi_send_retrive_req(struct call_desc *cd)
+capi_send_fac_suppl_req(struct call_desc *cd, u_int16_t wFunction)
 {
     _cmsg CMSG;
     char fac[4];
 
     fac[0] = 3;	/* len */
-    fac[1] = 0x03;	/* retrieve */
-    fac[2] = 0x00;
+    fac[1] = wFunction & 0xFF;
+    fac[2] = (wFunction >> 8) & 0xFF;
     fac[3] = 0;	
 
     FACILITY_REQ_HEADER(&CMSG, cd->p_app->application_id, 
@@ -4996,7 +4996,9 @@ capi_handle_facility_indication(_cmsg *CMSG, struct call_desc **pp_cd)
 		}
 	}
 
-	if (FACILITY_IND_FACILITYSELECTOR(CMSG) == FACILITYSELECTOR_SUPPLEMENTARY) {
+	if (FACILITY_IND_FACILITYSELECTOR(CMSG) == 
+	    FACILITYSELECTOR_SUPPLEMENTARY) {
+
 		/* supplementary sservices */
 
 		temp = (capi_get_1(parm,0) | (capi_get_1(parm,2) << 8));
@@ -5042,7 +5044,7 @@ capi_handle_facility_indication(_cmsg *CMSG, struct call_desc **pp_cd)
 			if (cd->flags.send_retrieve_req_on_hold_ind) {
 			    cd->flags.send_retrieve_req_on_hold_ind = 0;
 
-			    capi_send_retrive_req(cd);
+			    capi_send_fac_suppl_req(cd, 0x0003 /* retrive */);
 			}
 		    }
 		}
@@ -5630,12 +5632,14 @@ capi_handle_connect_indication(_cmsg *CMSG, struct call_desc **pp_cd)
  * CAPI FACILITY_CONF
  */
 static void
-capi_handle_facility_confirmation_app(_cmsg *CMSG, struct cc_capi_application *p_app)
+capi_handle_facility_confirmation_app(_cmsg *CMSG, 
+				      struct cc_capi_application *p_app)
 {
-	u_int16_t wSelector = FACILITY_CONF_FACILITYSELECTOR(CMSG);
 	const void *param = FACILITY_CONF_FACILITYCONFIRMATIONPARAMETER(CMSG);
+	u_int16_t wSelector = FACILITY_CONF_FACILITYSELECTOR(CMSG);
 	struct cc_capi_controller *p_ctrl = p_app->temp_p_ctrl;
-	u_int32_t services;
+	u_int16_t wFunction;
+	u_int32_t dwServices;
 
 	if (p_ctrl == NULL) {
 	    return;
@@ -5643,55 +5647,60 @@ capi_handle_facility_confirmation_app(_cmsg *CMSG, struct cc_capi_application *p
 
 	if (wSelector == FACILITYSELECTOR_SUPPLEMENTARY) {
 
-#warning "XXX next byte; check get support;"
+	    wFunction = capi_get_2(param,0);
 
-	    p_app->received_facility_conf = 1;
-	    p_app->temp_p_ctrl = NULL;
+	    if (wFunction == 0x0000) {
 
-	    if (capi_get_1(param,3) != 0x00) {
-	        cc_log(LOG_NOTICE, "supplementary services "
-		       "info = %#x\n", capi_get_1(param,0));
-		return;
-	    }
+	        /* get supported services */
 
-	    services = capi_get_4(param,5);
-	    cc_verbose(3, 0, VERBOSE_PREFIX_4 "supplementary "
-		   "services : 0x%08x\n", services);
+	        p_app->received_facility_conf = 1;
+		p_app->temp_p_ctrl = NULL;
+
+		if (capi_get_2(param,3) != 0x0000) {
+		    cc_log(LOG_NOTICE, "supplementary services "
+		       "info = 0x%04x\n", capi_get_2(param,3));
+		    return;
+		}
+
+		dwServices = capi_get_4(param,5);
+		cc_verbose(3, 0, VERBOSE_PREFIX_4 "supplementary "
+			   "services : 0x%08x\n", dwServices);
 	
-	    /* success, so set the features we have */
+		/* success, so set the features we have */
 
-	    if (services & 0x0001) {
-	        p_ctrl->support.holdretrieve = 1;
-	    }
-	    if (services & 0x0002) {
-		p_ctrl->support.terminalportability = 1;
-	    }
-	    if (services & 0x0004) {
-		p_ctrl->support.ECT = 1;
-	    }
-	    if (services & 0x0008) {
-		p_ctrl->support.threePTY = 1;
-	    }
-	    if (services & 0x0010) {
-		p_ctrl->support.CF = 1;
-	    }
-	    if (services & 0x0020) {
-		p_ctrl->support.CD = 1;
-	    }
-	    if (services & 0x0040) {
-		p_ctrl->support.MCID = 1;
-	    }
-	    if (services & 0x0080) {
-		p_ctrl->support.CCBS = 1;
-	    }
-	    if (services & 0x0100) {
-		p_ctrl->support.MWI = 1;
-	    }
-	    if (services & 0x0200) {
-		p_ctrl->support.CCNR = 1;
-	    }
-	    if (services & 0x0400) {
-		p_ctrl->support.CONF = 1;
+		if (dwServices & 0x0001) {
+		    p_ctrl->support.holdretrieve = 1;
+		}
+		if (dwServices & 0x0002) {
+		    p_ctrl->support.terminalportability = 1;
+		}
+		if (dwServices & 0x0004) {
+		    p_ctrl->support.ECT = 1;
+		}
+		if (dwServices & 0x0008) {
+		    p_ctrl->support.threePTY = 1;
+		}
+		if (dwServices & 0x0010) {
+		    p_ctrl->support.CF = 1;
+		}
+		if (dwServices & 0x0020) {
+		    p_ctrl->support.CD = 1;
+		}
+		if (dwServices & 0x0040) {
+		    p_ctrl->support.MCID = 1;
+		}
+		if (dwServices & 0x0080) {
+		    p_ctrl->support.CCBS = 1;
+		}
+		if (dwServices & 0x0100) {
+		    p_ctrl->support.MWI = 1;
+		}
+		if (dwServices & 0x0200) {
+		    p_ctrl->support.CCNR = 1;
+		}
+		if (dwServices & 0x0400) {
+		    p_ctrl->support.CONF = 1;
+		}
 	    }
 	}
 	return;
@@ -6033,25 +6042,24 @@ static u_int16_t
 chan_capi_cmd_call_deflect(struct call_desc *cd, struct call_desc *cd_unknown,
 			   char *param)
 {
-	_cmsg CMSG;
-	u_int8_t bchaninfo[3];
-	u_int8_t fac[60];
 	int param_len = strlen(param);
+	u_int8_t fac[64];
+	_cmsg CMSG;
 
 	cc_mutex_assert(&cd->p_app->lock, MA_OWNED);
 
 	if (!cd->support.CD) {
-		cd_log(cd, LOG_NOTICE, "call deflection "
-		       "is not supported by CAPI controller!\n");
-		return -1;
+	    cd_log(cd, LOG_NOTICE, "call deflection "
+		   "is not supported by CAPI controller!\n");
+	    return -1;
 	}
 
 	if ((cd->state != CAPI_STATE_INCALL) &&
 	    (cd->state != CAPI_STATE_DID) &&
 	    (cd->state != CAPI_STATE_ALERTING)) {
-		cd_log(cd, LOG_WARNING, "wrong state of call for "
-		       "call deflection!\n");
-		return -1;
+	    cd_log(cd, LOG_WARNING, "wrong state of call for "
+		   "call deflection!\n");
+	    return -1;
 	}
 
 	if (cd->state != CAPI_STATE_ALERTING) {
@@ -6059,68 +6067,32 @@ chan_capi_cmd_call_deflect(struct call_desc *cd, struct call_desc *cd_unknown,
 	}
 
 	cd_verbose(cd, 2, 1, 3, "\n");
-	
-	fac[0] = 0;	/* len */
-	fac[1] = 0;	/* len */
-	fac[2] = 0x01;	/* Use D-Chan */
-	fac[3] = 0;	/* Keypad len */
-	fac[4] = 31;	/* user user data? len = 31 = 29 + 2 */
-	fac[5] = 0x1c;	/* magic? */
-	fac[6] = 0x1d;	/* strlen destination + 18 = 29 */
-	fac[7] = 0x91;	/* .. */
-	fac[8] = 0xA1;
-	fac[9] = 0x1A;	/* strlen destination + 15 = 26 */
-	fac[10] = 0x02;
-	fac[11] = 0x01;
-	fac[12] = 0x70;
-	fac[13] = 0x02;
-	fac[14] = 0x01;
-	fac[15] = 0x0d;
-	fac[16] = 0x30;
-	fac[17] = 0x12;	/* strlen destination + 7 = 18 */
-	fac[18] = 0x30;	/* ...hm 0x30 */
-	fac[19] = 0x0d;	/* strlen destination + 2 */
-	fac[20] = 0x80;	/* CLIP */
-	fac[21] = 0x0b;	/* strlen destination */
-	fac[22] = 0x01;	/* destination start */
-	fac[23] = 0x01;	/* */  
-	fac[24] = 0x01;	/* */  
-	fac[25] = 0x01;	/* */  
-	fac[26] = 0x01;	/* */
-	fac[27] = 0x01;	/* */
-	fac[28] = 0x01;	/* */
-	fac[29] = 0x01;	/* */
-	fac[30] = 0x01;	/* */
-	fac[31] = 0x01;	/* */
-	fac[32] = 0x01;	/* */
-	fac[33] = 0x01;	/* 0x01 = sending complete */
-	fac[34] = 0x01;
-	fac[35] = 0x01;
-				   
-	memcpy(((u_int8_t *)fac) + 22, param, param_len);
-	
-	fac[22 + param_len] = 0x01;	/* fill with 0x01 if number is only 6 numbers (local call) */
-	fac[23 + param_len] = 0x01;
-	fac[24 + param_len] = 0x01;
-	fac[25 + param_len] = 0x01;
-	fac[26 + param_len] = 0x01;
-     
-	fac[6] = 18 + param_len;
-	fac[9] = 15 + param_len;
-	fac[17] = 7 + param_len;
-	fac[19] = 2 + param_len;
-	fac[21] = param_len;
 
-	bchaninfo[0] = 0x1;
-	bchaninfo[1] = 0x1;  /* use D-Channel */
-	bchaninfo[2] = 0x0;
-	
-	INFO_REQ_HEADER(&CMSG, cd->p_app->application_id, 
-			get_msg_num_other(cd->p_app), cd->msg_plci);
-	INFO_REQ_BCHANNELINFORMATION(&CMSG) = (_cstruct)bchaninfo;
-	INFO_REQ_KEYPADFACILITY(&CMSG) = 0;
-	INFO_REQ_USERUSERDATA(&CMSG) = 0;
-	INFO_REQ_FACILITYDATAARRAY(&CMSG) = (_cstruct)&fac[4];
+	if (param_len > (sizeof(fac)-0x0B)) {
+	    cd_log(cd, LOG_WARNING, "truncating long deflection "
+		   "number from %d to %d bytes!\n",
+		   param_len, sizeof(fac)-0x0B);
+	    param_len = sizeof(fac)-0x0B;
+	}
+
+	fac[0] = 0x0A + param_len; /* length */
+	fac[1] = 0x0D; /* call deflection */
+	fac[2] = 0x00;
+	fac[3] = 0x07 + param_len; /* struct len */
+	fac[4] = 0x01; /* display of own address allowed */
+	fac[5] = 0x00;
+	fac[6] = 0x03 + param_len;
+	fac[7] = 0x00; /* type of facility number */
+	fac[8] = 0x80; /* number plan */
+	fac[9] = 0x80; /* presentation allowed */
+	fac[10+param_len] = 0x00; /* empty subaddress */
+
+	bcopy(param, fac+10, param_len);
+
+	FACILITY_REQ_HEADER(&CMSG, cd->p_app->application_id, 
+			    get_msg_num_other(cd->p_app), cd->msg_plci);
+	FACILITY_REQ_FACILITYSELECTOR(&CMSG) = FACILITYSELECTOR_SUPPLEMENTARY;
+	FACILITY_REQ_FACILITYREQUESTPARAMETER(&CMSG) = (_cstruct)&fac;
 
 	return __capi_put_cmsg(cd->p_app, &CMSG);
 }
@@ -6252,9 +6224,6 @@ static u_int16_t
 chan_capi_cmd_malicious(struct call_desc *cd, struct call_desc *cd_unknown,
 			char *param)
 {
-	_cmsg	CMSG;
-	char	fac[4];
-
 	cc_mutex_assert(&cd->p_app->lock, MA_OWNED);
 
 	if (!cd->support.MCID) {
@@ -6265,17 +6234,7 @@ chan_capi_cmd_malicious(struct call_desc *cd, struct call_desc *cd_unknown,
 
 	cd_verbose(cd, 2, 1, 4, "sending MCID\n");
 
-	fac[0] = 3;      /* len */
-	fac[1] = 0x0e;   /* MCID */
-	fac[2] = 0x00;
-	fac[3] = 0;	
-
-	FACILITY_REQ_HEADER(&CMSG, cd->p_app->application_id, 
-			    get_msg_num_other(cd->p_app), cd->msg_plci);
-	FACILITY_REQ_FACILITYSELECTOR(&CMSG) = FACILITYSELECTOR_SUPPLEMENTARY;
-	FACILITY_REQ_FACILITYREQUESTPARAMETER(&CMSG) = (_cstruct)&fac;
-
-	return __capi_put_cmsg(cd->p_app, &CMSG);
+	return capi_send_fac_suppl_req(cd, 0x000E /* MCID */);
 }
 
 /*---------------------------------------------------------------------------*
@@ -6287,15 +6246,13 @@ static u_int16_t
 chan_capi_cmd_hold(struct call_desc *cd, struct call_desc *cd_unknown, 
 		   char *param)
 {
-	_cmsg CMSG;
-	char fac[4];
-
 	cc_mutex_assert(&cd->p_app->lock, MA_OWNED);
 
 	/* TODO: support holdtype notify */
 
 	if (cd->flags.send_retrieve_req_on_hold_ind) {
-		cd_log(cd, LOG_NOTICE, "Retrive already buffered. Please try to hold again.\n");
+		cd_log(cd, LOG_NOTICE, "Retrive already buffered. "
+		       "Please try to hold again.\n");
 		return -1;
 	}
 
@@ -6321,17 +6278,7 @@ chan_capi_cmd_hold(struct call_desc *cd, struct call_desc *cd_unknown,
 	cd->flags.hold_is_active = 1;
 	cd->flags.hold_is_pending = 1;
 
-	fac[0] = 3;	/* len */
-	fac[1] = 0x02;	/* HOLD */
-	fac[2] = 0x00;
-	fac[3] = 0;	
-
-	FACILITY_REQ_HEADER(&CMSG, cd->p_app->application_id, 
-			    get_msg_num_other(cd->p_app), cd->msg_plci);
-	FACILITY_REQ_FACILITYSELECTOR(&CMSG) = FACILITYSELECTOR_SUPPLEMENTARY;
-	FACILITY_REQ_FACILITYREQUESTPARAMETER(&CMSG) = (_cstruct)&fac;
-
-	return __capi_put_cmsg(cd->p_app, &CMSG);
+	return capi_send_fac_suppl_req(cd, 0x0002 /* HOLD */);
 }
 
 /*---------------------------------------------------------------------------*
@@ -6396,7 +6343,7 @@ chan_capi_cmd_retrieve(struct call_desc *cd, struct call_desc *cd_unknown,
 
 	} else {
 
-	    capi_send_retrive_req(cd);
+	    capi_send_fac_suppl_req(cd, 0x0003 /* retrieve */);
 	}
 
 	cd_verbose(cd, 2, 1, 4, "retrieving call\n");
@@ -6683,8 +6630,10 @@ static void *do_periodic(void *data)
 		    p_app->application_uptime++;
 
 		    /* keep the highest allocation rate so far */
-		    if (p_app->cd_alloc_rate_record < p_app->cd_alloc_rate_curr) {
-		        p_app->cd_alloc_rate_record = p_app->cd_alloc_rate_curr;
+		    if (p_app->cd_alloc_rate_record < 
+			p_app->cd_alloc_rate_curr) {
+		        p_app->cd_alloc_rate_record = 
+			  p_app->cd_alloc_rate_curr;
 		    }
 
 		    /* reset the allocation rate */
@@ -6709,7 +6658,8 @@ static void *do_periodic(void *data)
  * get supported services
  */
 static void
-capi_get_supported_sservices(struct cc_capi_application *p_app, struct cc_capi_controller *p_ctrl)
+capi_get_supported_sservices(struct cc_capi_application *p_app, 
+			     struct cc_capi_controller *p_ctrl)
 {
 	_cmsg CMSG;
 	u_int16_t to = 0x80;
@@ -7091,8 +7041,10 @@ chan_capi_fill_controller_info(struct cc_capi_application *p_app)
 		        controller_max = (CAPI_MAX_CONTROLLERS-1);
 		    }
 
-		    cc_verbose(3, 0, VERBOSE_PREFIX_2 "This box has %d CAPI controller%s that "
-			       "can be used by chan_capi.\n", controller_max, 
+		    cc_verbose(3, 0, VERBOSE_PREFIX_2 "This box has "
+			       "%d CAPI controller%s that "
+			       "can be used by chan_capi.\n", 
+			       controller_max, 
 			       (controller_max != 1) ? "s" : "");
 		}
 
@@ -7119,7 +7071,8 @@ chan_capi_fill_controller_info(struct cc_capi_application *p_app)
 			p_ctrl->support.lineinterconnect = 1;
 		}
 
-		cc_verbose(3, 0, VERBOSE_PREFIX_3 "CAPI controller %d supports: "
+		cc_verbose(3, 0, VERBOSE_PREFIX_3 "CAPI controller %d "
+			   "supports: "
 			   "%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s\n", n,
 			   p_ctrl->support.holdretrieve ? "[HOLD/RETRIEVE]" : "",
 			   p_ctrl->support.terminalportability ? "[TERMINAL PORTABILITY]" : "",
