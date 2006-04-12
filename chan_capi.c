@@ -6201,7 +6201,10 @@ chan_capi_cmd_echosquelch(struct call_desc *cd, struct call_desc *cd_unknown,
 {
 	cc_mutex_assert(&cd->p_app->lock, MA_OWNED);
 
-	if (ast_true(param)) {
+	if (strcmp(param, "fax") == 0) {
+		cd->options.echo_cancel_fax = 1;
+		cd->options.echo_cancel_in_software = 1;
+	} else if (ast_true(param)) {
 		cd->options.echo_cancel_in_software = 1;
 	} else if (ast_false(param)) {
 		cd->options.echo_cancel_in_software = 0;
@@ -6210,8 +6213,9 @@ chan_capi_cmd_echosquelch(struct call_desc *cd, struct call_desc *cd_unknown,
 		       "echosquelch is invalid.\n", param);
 		return -1;
 	}
-	cd_verbose(cd, 2, 1, 4, "echosquelch switched %s\n",
-		   cd->options.echo_cancel_in_software ? "ON" : "OFF");
+	cd_verbose(cd, 2, 1, 4, "echosquelch switched %s%s\n",
+		   cd->options.echo_cancel_in_software ? "ON" : "OFF",
+		   cd->options.echo_cancel_fax ? " (FAX)" : "");
 	return 0;
 }
 
