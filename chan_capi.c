@@ -324,13 +324,13 @@ soft_echo_cancel_process(struct call_desc *cd, struct soft_echo_cancel *rx,
 
 	/* demultiplex FAX tone */
 
-	rx->sin_2100_amp += 
-	  (temp * ((int32_t)(sin_2100_demux[rx->sincos_2100_count % 80]))) /
-	  0x1000;
+	rx->sin_2100_amp_curr += 
+	  (temp * ((int32_t)(sin_2100_demux[rx->sincos_2100_count_1 % 80]))) /
+	  0x100;
 
-	rx->cos_2100_amp += 
-	  (temp * ((int32_t)(cos_2100_demux[rx->sincos_2100_count % 80]))) /
-	  0x1000;
+	rx->cos_2100_amp_curr += 
+	  (temp * ((int32_t)(cos_2100_demux[rx->sincos_2100_count_1 % 80]))) /
+	  0x100;
 
 	if (sound_factor) {
 
@@ -370,34 +370,59 @@ soft_echo_cancel_process(struct call_desc *cd, struct soft_echo_cancel *rx,
 	    }
 	}
 
-	rx->sincos_2100_count++;
-	if (rx->sincos_2100_count >= 8000) {
+	rx->sincos_2100_count_1++;
+	if (rx->sincos_2100_count_1 >= 400) {
 
-	    rx->sin_2100_amp /= 0x10000;
-	    rx->cos_2100_amp /= 0x10000;
+	    int32_t dx,dy,dr;
 
-	    temp = sqrt_32((rx->sin_2100_amp*rx->sin_2100_amp) +
-			   (rx->cos_2100_amp*rx->cos_2100_amp));
+	    rx->sin_2100_amp_curr /= 0x10000;
+	    rx->cos_2100_amp_curr /= 0x10000;
+
+	    temp = ((rx->sin_2100_amp_curr*rx->sin_2100_amp_curr) +
+		    (rx->cos_2100_amp_curr*rx->cos_2100_amp_curr));
+
+	    dx = (rx->cos_2100_amp_curr -
+		  rx->cos_2100_amp_last);
+
+	    dy = (rx->sin_2100_amp_curr -
+		  rx->sin_2100_amp_last);
+
+	    dr = ((dx*dx) + (dy*dy));
 #if 0
-	    cc_log(LOG_NOTICE, "FAX amplitude: %s0x%08x\n", 
-		   (rx > tx) ? "                " : "",
-		   temp);
+	    cc_log(LOG_NOTICE, "FAX amplitude: %s t=0x%08x r=0x%08x \n", 
+		   (rx > tx) ? "                        " : "",
+		   temp, dr);
 #endif
-	    if(temp >= 0x300)
+	    if(((dr < 0x10) && (temp > 0x00010000)) ||
+	       ((dr < 0x20) && (temp > 0x01000000)))
 	    {
+	        rx->sincos_2100_count_2++;
+
 	        /* disable the echo canceller */
 
-	        if(cd->options.echo_cancel_fax == 0) {
+	        if((rx->sincos_2100_count_2 >= 4) &&
+		   (cd->options.echo_cancel_fax == 0)) {
 		   cd->options.echo_cancel_fax = 1;
 
 		   cd_verbose(cd, 1, 0, 3, "FAX tone detected, "
 			      "switching echo supressor!\n");
 		}
 	    }
+	    else
+	    {
+	        rx->sincos_2100_count_2 = 0;
+	    }
 
-	    rx->sincos_2100_count = 0;
-	    rx->sin_2100_amp = 0;
-	    rx->cos_2100_amp = 0;
+	    rx->sincos_2100_count_1 = 0;
+
+	    rx->sin_2100_amp_last = 
+	      rx->sin_2100_amp_curr;
+
+	    rx->cos_2100_amp_last = 
+	      rx->cos_2100_amp_curr;
+
+	    rx->sin_2100_amp_curr = 0;
+	    rx->cos_2100_amp_curr = 0;
 	}
 
 	rx->samples++;
@@ -7268,6 +7293,13 @@ capi_parse_iface_config(struct ast_variable *v, const char *name)
 	    CONF_GET_TRUE(v, cep->options.echo_cancel_in_software, "echosquelch", 1);
 	    CONF_GET_TRUE(v, cep->options.bridge, "bridge", 1);
 	    CONF_GET_TRUE(v, cep->options.ntmode, "ntmode", 1);
+
+	    if((!strcasecmp(v->name, "echosquelch")) &&
+	       (!strcmp(v->value, "fax"))) {
+	        cep->options.echo_cancel_fax = 1;
+		cep->options.echo_cancel_in_software = 1;
+		continue;
+	    }
 
 	    if (!strcasecmp(v->name, "callgroup")) {
 	        cep->call_group = ast_get_group(v->value);

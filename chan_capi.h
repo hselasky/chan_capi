@@ -427,9 +427,14 @@ struct soft_echo_cancel {
   u_int8_t  unused : 7;
   u_int8_t  stuck;     /* number of windows without data */
 
-  int32_t sin_2100_amp;
-  int32_t cos_2100_amp;
-  u_int16_t sincos_2100_count;
+  int32_t sin_2100_amp_last;
+  int32_t cos_2100_amp_last;
+
+  int32_t sin_2100_amp_curr;
+  int32_t cos_2100_amp_curr;
+
+  u_int16_t sincos_2100_count_1;
+  u_int16_t sincos_2100_count_2;
 };
 
 struct cc_capi_application;
