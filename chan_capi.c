@@ -325,12 +325,12 @@ soft_echo_cancel_process(struct call_desc *cd, struct soft_echo_cancel *rx,
 	/* demultiplex FAX tone */
 
 	rx->sin_2100_amp_curr += 
-	  (temp * ((int32_t)(sin_2100_demux[rx->sincos_2100_count_1 % 80]))) /
-	  0x100;
+	  (temp * ((int32_t)(sin_2100_demux[rx->sincos_2100_count_1]))) /
+	  0x40; 
 
 	rx->cos_2100_amp_curr += 
-	  (temp * ((int32_t)(cos_2100_demux[rx->sincos_2100_count_1 % 80]))) /
-	  0x100;
+	  (temp * ((int32_t)(cos_2100_demux[rx->sincos_2100_count_1]))) /
+	  0x40;
 
 	if (sound_factor) {
 
@@ -371,7 +371,7 @@ soft_echo_cancel_process(struct call_desc *cd, struct soft_echo_cancel *rx,
 	}
 
 	rx->sincos_2100_count_1++;
-	if (rx->sincos_2100_count_1 >= 400) {
+	if (rx->sincos_2100_count_1 >= 80) {
 
 	    int32_t dx,dy,dr;
 
@@ -389,19 +389,23 @@ soft_echo_cancel_process(struct call_desc *cd, struct soft_echo_cancel *rx,
 
 	    dr = ((dx*dx) + (dy*dy));
 #if 0
-	    cc_log(LOG_NOTICE, "FAX amplitude: %s d=%d t=0x%08x r=0x%08x\n", 
+	    cc_log(LOG_NOTICE, "FAX amplitude: %s d=%d t=0x%08x r=0x%08x %d\n", 
 		   (rx > tx) ? "                             " : "",
-		   cd->options.echo_cancel_fax, temp, dr);
+		   cd->options.echo_cancel_fax, temp, dr, temp - dr);
 #endif
+	    /*
+	     * detect 2100 +/- 16.7 Hz 
+	     * according to ITU G.168
+	     */
 	    if((dr >= 0) &&
-	       (dr < (temp / 0x100)) && 
+	       (dr < temp) && 
 	       (temp > 0x10000))
 	    {
 	        rx->sincos_2100_count_2++;
 
 	        /* disable the echo canceller */
 
-	        if((rx->sincos_2100_count_2 >= 4) &&
+	        if((rx->sincos_2100_count_2 >= 20) &&
 		   (cd->options.echo_cancel_fax == 0)) {
 		   cd->options.echo_cancel_fax = 1;
 
