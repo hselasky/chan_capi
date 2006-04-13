@@ -389,12 +389,13 @@ soft_echo_cancel_process(struct call_desc *cd, struct soft_echo_cancel *rx,
 
 	    dr = ((dx*dx) + (dy*dy));
 #if 0
-	    cc_log(LOG_NOTICE, "FAX amplitude: %s t=0x%08x r=0x%08x \n", 
-		   (rx > tx) ? "                        " : "",
-		   temp, dr);
+	    cc_log(LOG_NOTICE, "FAX amplitude: %s d=%d t=0x%08x r=0x%08x\n", 
+		   (rx > tx) ? "                             " : "",
+		   cd->options.echo_cancel_fax, temp, dr);
 #endif
-	    if(((dr < 0x10) && (temp > 0x00010000)) ||
-	       ((dr < 0x20) && (temp > 0x01000000)))
+	    if((dr >= 0) &&
+	       (dr < (temp / 0x100)) && 
+	       (temp > 0x10000))
 	    {
 	        rx->sincos_2100_count_2++;
 
