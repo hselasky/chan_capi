@@ -2672,6 +2672,28 @@ cd_handle_dst_telno(struct call_desc *cd, const u_int8_t *p_dst_telno)
 }
 
 /*---------------------------------------------------------------------------*
+ *      cd_send_pbx_progress - forward progress to the PBX
+ *---------------------------------------------------------------------------*/
+static void
+cd_send_pbx_progress(struct call_desc *cd)
+{
+	if (cd->flags.dir_outgoing &&
+	    cd->flags.progress_received &&
+	    (cd->flags.progress_transmitted == 0)) {
+
+	    cd->flags.progress_transmitted = 1;
+
+	    /* connect B-channel */
+	    capi_send_connect_b3_req(cd);
+
+	    /* forward PBX signal */
+	    cd_send_pbx_frame(cd, AST_FRAME_CONTROL, 
+			      AST_CONTROL_PROGRESS, NULL, 0);
+	}
+	return;
+}
+
+/*---------------------------------------------------------------------------*
  *      cd_handle_progress_indicator - handle progress indicators
  *
  * returns 0 on success
@@ -2698,20 +2720,10 @@ cd_handle_progress_indicator(struct call_desc *cd, const u_int8_t prog_ind)
 	break;
     case 0x08:
         cd_verbose(cd, 4, 1, 4, "In-band information available\n");
+	cd->flags.progress_received = 1;
 
-	if (cd->flags.early_b3_enable &&
-	    cd->flags.dir_outgoing) { 
-
-	    if (!(cd->flags.progress_transmitted)) {
-	        cd->flags.progress_transmitted = 1;
-
-		/* connect B-channel */
-		capi_send_connect_b3_req(cd);
-
-		/* forward PBX signal */
-		cd_send_pbx_frame(cd, AST_FRAME_CONTROL, 
-				  AST_CONTROL_PROGRESS, NULL, 0);
-	    }
+	if(cd->flags.b3_on_progress) {
+	   cd_send_pbx_progress(cd);
 	}
 	break;
     default:
@@ -2993,8 +3005,6 @@ capi_send_connect_resp(struct call_desc *cd, u_int16_t wReject,
 	}
 
 	cd->state = CAPI_STATE_ANSWERING;
-	cd->flags.early_b3_enable = 0;
-	cd->flags.early_b3_always = 0;
 
     } else {
 
@@ -3686,49 +3696,27 @@ __chan_capi_call(struct call_desc *cd, const char *idest, int timeout)
 	strlcpy(dstring, idest, sizeof(dstring));
 	parse_dialstring(dstring, &interface, &dest, &param, &ocid);
 
-	/* init param settings */
-	cd->flags.early_b3_enable = 0;
-	cd->flags.early_b3_always = 0;
-
 	/* parse the parameters */
 	while ((param) && (*param)) {
 		switch (*param) {
-		case 'b':	/* always B3 */
-			if (cd->flags.early_b3_enable) {
-				cc_log(LOG_WARNING, "B3 already set in '%s'\n", idest);
-			}
-			cd->flags.early_b3_enable = 1;
-			cd->flags.early_b3_always = 1;
+		case 'b':	/* early B3 on progress */
+			cd->flags.b3_on_progress = 1;
 			break;
-		case 'B':	/* only do B3 on successfull calls */
-			if (cd->flags.early_b3_enable) {
-				cc_log(LOG_WARNING, "B3 already set in '%s'\n", idest);
-			}
-			cd->flags.early_b3_enable = 1;
-			cd->flags.early_b3_always = 0;
+		case 'B':	/* no early B3 on disconnect */
+			cd->flags.want_late_inband = 0;
 			break;
 		case 'o':	/* overlap sending of digits */
-			if (sending_complete == 0) {
-				cc_log(LOG_WARNING, "Sending complete already "
-				       "cleared for '%s'\n", idest);
-			}
 			sending_complete = 0;
 			break;
 		case 'd':	/* use default cid */
-			if (use_dst_default == 1) {
-				cc_log(LOG_WARNING, "Default CID already "
-				       "set in '%s'\n", idest);
-			}
 			use_dst_default = 1;
 			break;
-
 		case 'l':	/* late inband signalling */
-		       if(cd->flags.enable_late_inband) {
-				cc_log(LOG_WARNING, "late inband already "
-				       "set in '%s'\n", idest);
-		       }
-		       cd->flags.enable_late_inband = 1;
+		       cd->flags.want_late_inband = 1;
 		       break;
+		case 'r':
+			cd->flags.b3_on_alert = 1;
+			break;
 
 		default:
 			cc_log(LOG_WARNING, "Unknown parameter '%c' in '%s', ignoring.\n",
@@ -3752,9 +3740,10 @@ __chan_capi_call(struct call_desc *cd, const char *idest, int timeout)
 		callernplan = atoi(ton) & 0x7f;
 	}
 
-	cd_verbose(cd, 1, 1, 2, "Outgoing call to '%s', %s, "
+	cd_verbose(cd, 1, 1, 2, "Outgoing call to '%s', %s, %s, "
 		   "sending%s complete, pres=0x%02x, ton=0x%02x\n",
-		   dest, cd->flags.early_b3_enable ? "early-B3" : " ",
+		   dest, cd->flags.b3_on_progress ? "early-B3 on progress" : " ",
+		   cd->flags.b3_on_alert ? "early-B3 on alert" : " ",
 		   sending_complete ? "" : " not", CLIR, callernplan);
 
 	/* set FD for PBX */
@@ -3844,7 +3833,7 @@ __chan_capi_call(struct call_desc *cd, const char *idest, int timeout)
 	  (_cstruct)&sending_not_complete_struct[0];
 
 #if ((CAPI_OS_HINT == 2) && (CAPI_STACK_VERSION > 204))
-	if(cd->flags.enable_late_inband) {
+	if(cd->flags.want_late_inband) {
 	    CONNECT_REQ_FLAG0(&CMSG) = 0x01;
 	}
 #endif
@@ -4701,7 +4690,8 @@ handle_info_disconnect(_cmsg *CMSG, struct call_desc *cd)
 		return;
 	}
 
-	if (cd->flags.dir_outgoing) {
+	if (cd->flags.dir_outgoing &&
+	    cd->flags.want_late_inband) {
 
 		cd_send_pbx_cause_control(cd, 1);
 
@@ -4756,9 +4746,7 @@ capi_handle_info_indication(_cmsg *CMSG, struct call_desc **pp_cd)
 		 * one case, where PROGRESS is received with
 		 * cause equal to "User Busy".
 		 */
-		if (!(cd->flags.early_b3_enable)) {
-
-#warning "should also check late inband here!"
+		if (!(cd->flags.want_late_inband)) {
 
 		    if (x == 0x11) {
 		        cd_send_pbx_frame(cd, AST_FRAME_NULL, 0, NULL, 0);
@@ -4885,6 +4873,9 @@ capi_handle_info_indication(_cmsg *CMSG, struct call_desc **pp_cd)
 		break;
 
 	case 0x8001:	/* ALERTING */
+		if (cd->flags.b3_on_alert) {
+		    cd_send_pbx_progress(cd);
+		}
 		cd_verbose(cd, 3, 1, 3, "ALERTING\n");
 		cd_send_pbx_frame(cd, AST_FRAME_CONTROL, 
 				  AST_CONTROL_RINGING, NULL, 0);
@@ -5574,7 +5565,6 @@ cd_start_pbx(struct call_desc **pp_cd, const char *exten)
 
 	return;
 }
-
 
 /*
  * CAPI CONNECT_IND
@@ -6655,7 +6645,7 @@ static void *do_periodic(void *data)
 			 * checked regularly ?
 			 */
 
-#warning "TODO: CHECK FOR CALLS THAT NEVER RECEIVED CONNECT_CONF;"
+#warning "TODO: check for calls that never received connect_conf;"
 
 			cd = cd->next;
 		    }

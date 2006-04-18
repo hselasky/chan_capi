@@ -224,13 +224,11 @@ struct cc_capi_flags {
 	/* set if "chan_capi" received a FAX in error */
 	u_int32_t fax_error : 1;
 
-	/* set if early B3 is enabled */
-	u_int32_t early_b3_enable : 1;
+	/* set if early B3 is enabled on progress */
+	u_int32_t b3_on_progress : 1;
 
-	/* set if early B3 should always be done. 
-	 * Else only on success. 
-	 */
-	u_int32_t early_b3_always : 1;
+	/* set if early B3 is enabled on alert */
+	u_int32_t b3_on_alert : 1;
 
 	/* set if the B3 link is active or up */
 	u_int32_t b3_active : 1;
@@ -252,6 +250,9 @@ struct cc_capi_flags {
 
 	/* set if "progress" has been sent */
 	u_int32_t progress_transmitted : 1;
+
+	/* set if "progress" has been received */
+	u_int32_t progress_received : 1;
 
 	/* set if "ECT" is pending */
 	u_int32_t ect_pending : 1;
@@ -278,7 +279,7 @@ struct cc_capi_flags {
 	u_int32_t send_retrieve_req_on_hold_ind : 1;
 
 	/* set if late inband signalling is enabled */
-	u_int32_t enable_late_inband : 1;
+	u_int32_t want_late_inband : 1;
 };
 
 struct cc_capi_options {
