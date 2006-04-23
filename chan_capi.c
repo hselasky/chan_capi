@@ -3686,6 +3686,10 @@ __chan_capi_call(struct call_desc *cd, const char *idest, int timeout)
 	char callerid[AST_MAX_EXTENSION];
 	char callingsubaddress[AST_MAX_EXTENSION];
 	char calledsubaddress[AST_MAX_EXTENSION];
+#ifdef CONNECT_REQ_DISPLAY
+	char display[AST_MAX_EXTENSION];
+#endif
+	char useruser[AST_MAX_EXTENSION];
 	u_int8_t buffer[8];
 	u_int8_t bchaninfo[4];
 	u_int8_t CLIR = 0;
@@ -3819,6 +3823,25 @@ __chan_capi_call(struct call_desc *cd, const char *idest, int timeout)
 	    CONNECT_REQ_SECONDCALLINGPARTYNUMBER(&CMSG) = (_cstruct)second_calling;
 	}
 #endif
+#ifdef CONNECT_REQ_DISPLAY
+	if ((p = pbx_builtin_getvar_helper(pbx_chan, "DISPLAY"))) {
+
+	    capi_build_struct(&display, sizeof(display), 
+			      p, strlen(p), NULL, 0, NULL, 0);
+
+	    CONNECT_REQ_DISPLAY(&CMSG) = (_cstruct)display;
+	}
+#else
+#warning "The display variable is not supported by CAPI!"
+#endif
+	if ((p = pbx_builtin_getvar_helper(pbx_chan, "USERUSERINFO"))) {
+
+	    capi_build_struct(&useruser, sizeof(useruser), 
+			      p, strlen(p), NULL, 0, NULL, 0);
+
+	    CONNECT_REQ_USERUSERDATA(&CMSG) = (_cstruct)useruser;
+	}
+
 	CONNECT_REQ_B1PROTOCOL(&CMSG) = 1;
 	CONNECT_REQ_B2PROTOCOL(&CMSG) = 1;
 	CONNECT_REQ_B3PROTOCOL(&CMSG) = 0;
@@ -4620,9 +4643,11 @@ capi_handle_dtmf_fax(struct call_desc *cd)
 		return;
 	}
 
-	if (!ast_exists_extension(pbx_chan, pbx_chan->context, "fax", 1, cd->src_telno)) {
-		cc_verbose(3, 0, VERBOSE_PREFIX_3 "Fax tone detected, but no fax "
-			   "extension for %s\n", pbx_chan->name);
+	if (!ast_exists_extension(pbx_chan, pbx_chan->context, "fax", 1, 
+				  cd->src_telno)) {
+		cc_verbose(3, 0, VERBOSE_PREFIX_3 "Fax tone detected, "
+			   "but no fax extension for %s\n", 
+			   pbx_chan->name);
 		return;
 	}
 
@@ -5427,8 +5452,8 @@ search_cep(struct call_desc *cd)
 
 			  cd->dst_strip_len = strip_len;
 
-			  cd_verbose(cd, 3, 0, 2, "Incoming call '%s' -> '%s'\n",
-				     cd->src_telno, cd->dst_telno);
+			  cd_verbose(cd, 3, 0, 2, "Incoming call '%s' -> "
+				     "'%s'\n", cd->src_telno, cd->dst_telno);
 			  break;
 		      }
 		    }
@@ -5577,17 +5602,25 @@ capi_handle_connect_indication(_cmsg *CMSG, struct call_desc **pp_cd)
 	u_int8_t start_immediate;
 	char buffer[AST_MAX_EXTENSION];
 
-	cd->bchannelinfo[0] = capi_get_1(CONNECT_IND_BCHANNELINFORMATION(CMSG),0) + '0';
+	cd->bchannelinfo[0] = 
+	  capi_get_1(CONNECT_IND_BCHANNELINFORMATION(CMSG),0) + '0';
 
-	cd->flags.sending_complete_received = (capi_get_2(CONNECT_IND_SENDINGCOMPLETE(CMSG), 0) == 0x0001);
+	cd->flags.sending_complete_received = 
+	  (capi_get_2(CONNECT_IND_SENDINGCOMPLETE(CMSG), 0) == 0x0001);
 
-	capi_get_multi_1(CONNECT_IND_CALLEDPARTYNUMBER(CMSG), 1, &cd->dst_telno, sizeof(cd->dst_telno));
-	cd->dst_ton = capi_get_1(CONNECT_IND_CALLEDPARTYNUMBER(CMSG), 0) & 0x7f;
+	capi_get_multi_1(CONNECT_IND_CALLEDPARTYNUMBER(CMSG), 1, 
+			 &cd->dst_telno, sizeof(cd->dst_telno));
+	cd->dst_ton = 
+	  capi_get_1(CONNECT_IND_CALLEDPARTYNUMBER(CMSG), 0) & 0x7f;
 
-	capi_get_multi_1(CONNECT_IND_CALLINGPARTYNUMBER(CMSG), 2, &cd->src_telno, sizeof(cd->src_telno));
+	capi_get_multi_1(CONNECT_IND_CALLINGPARTYNUMBER(CMSG), 2, 
+			 &cd->src_telno, sizeof(cd->src_telno));
 
-	cd->src_ton = capi_get_1(CONNECT_IND_CALLINGPARTYNUMBER(CMSG), 0) & 0x7f;
-	cd->src_pres  = capi_get_1(CONNECT_IND_CALLINGPARTYNUMBER(CMSG), 1) & 0x63;
+	cd->src_ton = 
+	  capi_get_1(CONNECT_IND_CALLINGPARTYNUMBER(CMSG), 0) & 0x7f;
+
+	cd->src_pres = 
+	  capi_get_1(CONNECT_IND_CALLINGPARTYNUMBER(CMSG), 1) & 0x63;
 
 	cd->msg_cip = CONNECT_IND_CIPVALUE(CMSG);
 
@@ -5600,24 +5633,46 @@ capi_handle_connect_indication(_cmsg *CMSG, struct call_desc **pp_cd)
 	pbx_chan->callingpres = cd->src_pres;
 #endif
 #ifdef CC_AST_CHANNEL_HAS_TRANSFERCAP	
-	pbx_builtin_setvar_helper(pbx_chan, "TRANSFERCAPABILITY", transfercapability2str(pbx_chan->transfercapability));
+	pbx_builtin_setvar_helper(pbx_chan, "TRANSFERCAPABILITY", 
+             transfercapability2str(pbx_chan->transfercapability));
 #endif
-	pbx_builtin_setvar_helper(pbx_chan, "BCHANNELINFO", &cd->bchannelinfo[0]);
+	pbx_builtin_setvar_helper(pbx_chan, "BCHANNELINFO", 
+				  &cd->bchannelinfo[0]);
 
 	snprintf(buffer, sizeof(buffer), "%d", cd->dst_ton);
 	pbx_builtin_setvar_helper(pbx_chan, "CALLEDTON", &buffer[0]);
 
-	capi_get_multi_1(CONNECT_IND_CALLINGPARTYSUBADDRESS(CMSG), 1, &buffer, sizeof(buffer));
+	capi_get_multi_1(CONNECT_IND_CALLINGPARTYSUBADDRESS(CMSG), 1, 
+			 &buffer, sizeof(buffer));
+
 	pbx_builtin_setvar_helper(pbx_chan, "CALLINGSUBADDRESS", &buffer[0]);
 
-	capi_get_multi_1(CONNECT_IND_CALLEDPARTYSUBADDRESS(CMSG), 1, &buffer, sizeof(buffer));
+	capi_get_multi_1(CONNECT_IND_CALLEDPARTYSUBADDRESS(CMSG), 1, 
+			 &buffer, sizeof(buffer));
+
 	pbx_builtin_setvar_helper(pbx_chan, "CALLEDSUBADDRESS", &buffer[0]);
 
-	capi_get_multi_1(CONNECT_IND_USERUSERDATA(CMSG), 0, &buffer, sizeof(buffer));
+	capi_get_multi_1(CONNECT_IND_USERUSERDATA(CMSG), 0, 
+			 &buffer, sizeof(buffer));
+
 	pbx_builtin_setvar_helper(pbx_chan, "USERUSERINFO", &buffer[0]);
 
-	capi_get_multi_1(CONNECT_IND_SECONDCALLINGPARTYNUMBER(CMSG), 2, &buffer, sizeof(buffer));
+	capi_get_multi_1(CONNECT_IND_SECONDCALLINGPARTYNUMBER(CMSG), 2, 
+			 &buffer, sizeof(buffer));
+
 	pbx_builtin_setvar_helper(pbx_chan, "SECONDCALLERID", &buffer[0]);
+
+#ifdef CONNECT_IND_DISPLAY
+	capi_get_multi_1(CONNECT_IND_DISPLAY(CMSG), 0, 
+			 &buffer, sizeof(buffer));
+
+	pbx_builtin_setvar_helper(pbx_chan, "DISPLAY", &buffer[0]);
+#endif
+
+	capi_get_multi_1(CONNECT_IND_KEYPADFACILITY(CMSG), 0, 
+			 &buffer, sizeof(buffer));
+
+	pbx_builtin_setvar_helper(pbx_chan, "KEYPAD", &buffer[0]);
 #if 0
 	capi_get_multi_1(.....);
 	pbx_builtin_setvar_helper(pbx_chan, "ANI2", &buffer[0]);
