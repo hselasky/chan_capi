@@ -29,7 +29,8 @@
 #ifndef __CHAN_CAPI_H__
 #define __CHAN_CAPI_H__
 
-#define CAPI_MAX_CONTROLLERS             32
+#define CAPI_MAX_CONTROLLERS             64
+#define CAPI_MAX_APPLICATIONS             8
 #define CAPI_MAX_B3_BLOCKS                7
 
 /* was : 130 bytes Alaw = 16.25 ms audio not suitable for VoIP */
@@ -649,9 +650,6 @@ struct cc_capi_application {
 };
 
 struct cc_capi_controller {
-
-	u_int8_t  controller_max; /* inclusive, copy */
-	u_int8_t  controller_unit; /* current controller unit */
 
 	u_int16_t b_channels_max;
 

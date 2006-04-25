@@ -135,7 +135,7 @@ static u_int16_t chan_capi_load_level = 0;
 
 static struct config_entry_global capi_global;
 
-static struct cc_capi_application *capi_application[CAPI_MAX_CONTROLLERS];
+static struct cc_capi_application *capi_application[CAPI_MAX_APPLICATIONS];
 
 static struct cc_capi_controller capi_controller[CAPI_MAX_CONTROLLERS];
 
@@ -232,27 +232,39 @@ soft_echo_cancel_get_factor(struct call_desc *cd,
         /* duplex sound */
 
         factor  = tx_power;
-	factor *= 64;
+
+	/* the following factor has been 
+	 * set according to listening tests:
+	 */
+	factor *= 38; 
 
 	if ((factor > rx_power) &&
 	    (tx_power > 32)) {
 
-	    /* activate the echo canceller
-	     *
-	     * NOTE: typical "rx_power:tx_power" 
-	     * ratio when only echo is received 
-	     * is 1:32
-	     */
-	    factor /= (rx_power ? rx_power : 1);
+	    if(tx->active) {
+	        factor = 0x00;
+	    } else {
+	        rx->active = 1;
 
-	    if (factor > (EC_FACTOR_MAX-1)) {
-	        factor = (EC_FACTOR_MAX-1);
-	    }
-	    if (factor < 4) {
-	        factor = 0;
+		/* activate the echo canceller
+		 *
+		 * NOTE: typical "rx_power:tx_power" 
+		 * ratio when only echo is received 
+		 * is 1:32
+		 */
+		factor /= (rx_power ? rx_power : 1);
+
+		if (factor > (EC_FACTOR_MAX-1)) {
+		    factor = (EC_FACTOR_MAX-1);
+		}
+		if (factor < 4) {
+		    factor = 0x00;
+		    rx->active = 0;
+		}
 	    }
 	} else {
-	    factor = 0;
+	    factor = 0x00;
+	    rx->active = 0;
 	}
     }
 #if 0
@@ -994,7 +1006,8 @@ chan_capi_fill_pvt(struct ast_channel *pbx_chan);
 #endif
 
 static u_int16_t
-chan_capi_fill_controller_info(struct cc_capi_application *p_app);
+chan_capi_fill_controller_info(struct cc_capi_application *p_app,
+			       const u_int16_t controller_unit);
 
 static struct call_desc *
 cd_by_pbx_chan(struct ast_channel *pbx_chan);
@@ -1793,7 +1806,7 @@ pbx_chan_by_plci_on_hold(u_int16_t plci)
     struct cc_capi_application *p_app;
     u_int16_t n;
 
-    for(n = 0; n < CAPI_MAX_CONTROLLERS; n++) 
+    for(n = 0; n < CAPI_MAX_APPLICATIONS; n++) 
     {
         p_app = capi_application[n];
 
@@ -1837,7 +1850,7 @@ cd_by_pbx_chan(struct ast_channel *pbx_chan)
     struct cc_capi_application *p_app;
     u_int16_t n;
 
-    for(n = 0; n < CAPI_MAX_CONTROLLERS; n++) 
+    for(n = 0; n < CAPI_MAX_APPLICATIONS; n++) 
     {
         p_app = capi_application[n];
 
@@ -3382,7 +3395,8 @@ static const struct {
 	{ PRI_TRANS_CAP_VIDEO,                  CAPI_CIPI_VIDEO }
 };
 
-static int tcap2cip(u_int16_t tcap)
+static int
+tcap2cip(u_int16_t tcap)
 {
 	int x;
 	
@@ -3424,7 +3438,8 @@ static const struct {
 	{ CAPI_CIPI_VIDEO_TELEPHONY_C2,      PRI_TRANS_CAP_DIGITAL }
 };
 
-static u_int16_t cip2tcap(int cip)
+static u_int16_t 
+cip2tcap(int cip)
 {
 	int x;
 	
@@ -3438,7 +3453,8 @@ static u_int16_t cip2tcap(int cip)
 /*
  *  TransferCapability to String conversion
  */
-static char *transfercapability2str(int transfercapability)
+static char *
+transfercapability2str(int transfercapability)
 {
 	switch(transfercapability) {
 	case PRI_TRANS_CAP_SPEECH:
@@ -4715,8 +4731,12 @@ handle_info_disconnect(_cmsg *CMSG, struct call_desc *cd)
 		return;
 	}
 
-	if (cd->flags.dir_outgoing &&
-	    cd->flags.want_late_inband) {
+	if(cd->flags.want_late_inband) {
+#warning "Should send a messages, but which?"
+		return;
+	}
+
+	if (cd->flags.dir_outgoing) {
 
 		cd_send_pbx_cause_control(cd, 1);
 
@@ -5329,7 +5349,8 @@ capi_handle_disconnect_b3_indication(_cmsg *CMSG, struct call_desc **pp_cd)
 /*
  * CAPI CONNECT_B3_IND
  */
-static void capi_handle_connect_b3_indication(_cmsg *CMSG, struct call_desc **pp_cd)
+static void
+capi_handle_connect_b3_indication(_cmsg *CMSG, struct call_desc **pp_cd)
 {
 	struct call_desc *cd = *pp_cd;
 	_cmsg CMSG2;
@@ -5394,8 +5415,8 @@ search_cep(struct call_desc *cd)
 	}
 
 	controller = (cd->msg_plci & 0xff);
-	if (controller > (CAPI_MAX_CONTROLLERS-1)) {
-	    controller = (CAPI_MAX_CONTROLLERS-1);
+	if (controller >= CAPI_MAX_CONTROLLERS) {
+	    return;
 	}
 
 	cep = cep_root_acquire();
@@ -6648,7 +6669,8 @@ chan_capi_command_exec(struct ast_channel *chan, void *data)
  * forwarded the digits to the PBX, and a flag saying if
  * it is sending is complete or not.
  */
-static void *do_periodic(void *data)
+static void *
+do_periodic(void *data)
 {
 	struct cc_capi_application *p_app;
 	struct call_desc *cd;
@@ -6659,7 +6681,7 @@ static void *do_periodic(void *data)
 	  
 	    cc_mutex_lock(&do_periodic_lock);
 
-	    for (x = 0; x < CAPI_MAX_CONTROLLERS; x++) {
+	    for (x = 0; x < CAPI_MAX_APPLICATIONS; x++) {
 
 	        p_app = capi_application[x];
 
@@ -6738,14 +6760,15 @@ static void *do_periodic(void *data)
  */
 static void
 capi_get_supported_sservices(struct cc_capi_application *p_app, 
-			     struct cc_capi_controller *p_ctrl)
+			     struct cc_capi_controller *p_ctrl,
+			     const u_int16_t controller_unit)
 {
 	_cmsg CMSG;
 	u_int16_t to = 0x80;
 	static const u_int8_t fac_struct[4] = { 3, 0, 0, 0 };
 
 	FACILITY_REQ_HEADER(&CMSG, p_app->application_id, 
-			    get_msg_num_other(p_app), p_ctrl->controller_unit);
+			    get_msg_num_other(p_app), controller_unit);
 	FACILITY_REQ_FACILITYSELECTOR(&CMSG) = FACILITYSELECTOR_SUPPLEMENTARY;
 	FACILITY_REQ_FACILITYREQUESTPARAMETER(&CMSG) = (_cstruct)&fac_struct;
 
@@ -6766,6 +6789,8 @@ capi_get_supported_sservices(struct cc_capi_application *p_app,
 	    capi_application_usleep(p_app, 10000);
 
 	}
+
+	p_app->temp_p_ctrl = NULL;
 	return;
 }
 
@@ -6799,12 +6824,6 @@ chan_capi_reload(int fd, int argc, char *argv[])
     if (p_app) {
 
 	cc_mutex_lock(&p_app->lock);
-
-	error = chan_capi_fill_controller_info(p_app);
-
-	if (error) {
-	    goto done;
-	}
 
 	error = chan_capi_scan_config(cfg);
 
@@ -6854,7 +6873,7 @@ chan_capi_get_info(int fd, int argc, char *argv[])
         return RESULT_SHOWUSAGE;
     }
 		
-    for (n = 0; n < CAPI_MAX_CONTROLLERS; n++) {
+    for (n = 0; n < CAPI_MAX_APPLICATIONS; n++) {
 
         p_app = capi_application[n];
 
@@ -7060,13 +7079,12 @@ chan_capi_fill_pvt(struct ast_channel *pbx_chan)
 /* fill controller information */
 
 static u_int16_t
-chan_capi_fill_controller_info(struct cc_capi_application *p_app)
+chan_capi_fill_controller_info(struct cc_capi_application *p_app,
+			       const u_int16_t controller_unit)
 {
 	struct cc_capi_profile profile;
-	struct cc_capi_controller *p_ctrl;
-	struct cc_capi_controller  ctrl_temp;
-	u_int16_t controller_max = 0; /* default */
-	u_int16_t n;
+	struct cc_capi_controller ctrl_temp;
+
 	u_int16_t error;
 
 	if (p_app == NULL) {
@@ -7076,105 +7094,72 @@ chan_capi_fill_controller_info(struct cc_capi_application *p_app)
 
 	cc_mutex_assert(&p_app->lock, MA_OWNED);
 
-	/* NOTE: BSD also treats "controller 0" as valid */
+	bzero(&profile, sizeof(profile));
 
-	for (n = 0; n < CAPI_MAX_CONTROLLERS; n++) {
+	bzero(&ctrl_temp, sizeof(ctrl_temp));
 
-		p_ctrl = &ctrl_temp;
-
-		bzero(p_ctrl, sizeof(*p_ctrl));
-
-		if (n <= controller_max) {
 #if (CAPI_OS_HINT == 1)
-		    error = capi20_get_profile(n, (CAPIProfileBuffer_t *)&profile);
+	error = capi20_get_profile(controller_unit, (CAPIProfileBuffer_t *)&profile);
 #elif (CAPI_OS_HINT == 2)
-		    error = capi20_get_profile(n, &profile, sizeof(profile));
+	error = capi20_get_profile(controller_unit, &profile, sizeof(profile));
 #else
-		    error = capi20_get_profile(n, (u_int8_t *)&profile);
+	error = capi20_get_profile(controller_unit, (u_int8_t *)&profile);
 #endif
-		} else {
-		    bzero(&profile, sizeof(profile));
-		    error = 0x10F3; /* invalid controller */
-		}
-		if (n == 0) {
-		    if (error) {
-		        cc_log(LOG_NOTICE, "unable to get CAPI profile, "
-			       "error=0x%04x!\n", error);
-			return error;
-		    }
 
-		    controller_max = 
-		      (profile.ncontrollers[0] |
-		       (profile.ncontrollers[1] << 8));
-#if (CAPI_OS_HINT == 2)
-		    if (controller_max) {
-		        controller_max--; /* BSD is exclusive */
-		    }
-#endif
-#if (CAPI_MAX_CONTROLLERS >= 256)
-#error "CAPI specification violation, (CAPI_MAX_CONTROLLERS >= 256)!"
-#endif
-		    /* range check */
-
-		    if (controller_max > (CAPI_MAX_CONTROLLERS-1)) {
-		        controller_max = (CAPI_MAX_CONTROLLERS-1);
-		    }
-
-		    cc_verbose(3, 0, VERBOSE_PREFIX_2 "This box has "
-			       "%d CAPI controller%s that "
-			       "can be used by chan_capi.\n", 
-			       controller_max, 
-			       (controller_max != 1) ? "s" : "");
-		}
-
-		p_ctrl->controller_unit = n;
-		p_ctrl->controller_max = controller_max;
-		p_ctrl->valid = (error == 0);
-		p_ctrl->b_channels_max =
-		  (profile.nbchannels[0] | (profile.nbchannels[1] << 8));
-
-		if (profile.globaloptions[0] & 0x08) {
-			p_ctrl->support.dtmf = 1;
-		}
-		
-		if (profile.globaloptions[1] & 0x01) {
-			p_ctrl->support.echo_cancel = 1;
-		}
-
-		if (profile.globaloptions[0] & 0x10) {
-			p_ctrl->support.sservices = 1;
-			capi_get_supported_sservices(p_app, p_ctrl);
-		}
-
-		if (profile.globaloptions[0] & 0x80) {
-			p_ctrl->support.lineinterconnect = 1;
-		}
-
-		cc_verbose(3, 0, VERBOSE_PREFIX_3 "CAPI controller %d "
-			   "supports: "
-			   "%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s\n", n,
-			   p_ctrl->support.holdretrieve ? "[HOLD/RETRIEVE]" : "",
-			   p_ctrl->support.terminalportability ? "[TERMINAL PORTABILITY]" : "",
-			   p_ctrl->support.ECT ? "[ECT]" : "",
-			   p_ctrl->support.threePTY ? "[3PTY]" : "",
-			   p_ctrl->support.CF ? "[CF]" : "",
-			   p_ctrl->support.CD ? "[CD]" : "",
-			   p_ctrl->support.MCID ? "[MCID]" : "",
-			   p_ctrl->support.CCBS ? "[CCBS]" : "",
-			   p_ctrl->support.MWI ? "[MWI]" : "",
-			   p_ctrl->support.CCNR ? "[CCNR]" : "",
-			   p_ctrl->support.CONF ? "[CONF]" : "",
-			   p_ctrl->support.dtmf ? "[DTMF]" : "",
-			   p_ctrl->support.echo_cancel ? "[echo cancellation]" : "",
-			   p_ctrl->support.sservices ? "[supplementary]" : "",
-			   p_ctrl->support.lineinterconnect ? "[line interconnect]" : "");
-
-		cc_mutex_lock(&capi_global_lock);
-		bcopy(p_ctrl, &capi_controller[n], sizeof(capi_controller[0]));
-		cc_mutex_unlock(&capi_global_lock);
-
+	if (error) {
+	    cc_log(LOG_WARNING, "unable to get CAPI profile "
+		   "for controller %d, error=0x%04x!\n", 
+		   controller_unit, error);
 	}
-	return 0; /* success */
+
+	ctrl_temp.valid = (error == 0);
+	ctrl_temp.b_channels_max =
+	  (profile.nbchannels[0] | 
+	   (profile.nbchannels[1] << 8));
+
+	if (profile.globaloptions[0] & 0x08) {
+	    ctrl_temp.support.dtmf = 1;
+	}
+		
+	if (profile.globaloptions[1] & 0x01) {
+	    ctrl_temp.support.echo_cancel = 1;
+	}
+
+	if (profile.globaloptions[0] & 0x10) {
+	    ctrl_temp.support.sservices = 1;
+	    capi_get_supported_sservices(p_app, &ctrl_temp, 
+					 controller_unit);
+	}
+
+	if (profile.globaloptions[0] & 0x80) {
+	    ctrl_temp.support.lineinterconnect = 1;
+	}
+
+	cc_verbose(3, 0, VERBOSE_PREFIX_3 "CAPI controller %d "
+		   "supports: "
+		   "%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s\n", controller_unit,
+		   ctrl_temp.support.holdretrieve ? "[HOLD/RETRIEVE]" : "",
+		   ctrl_temp.support.terminalportability ? "[TERMINAL PORTABILITY]" : "",
+		   ctrl_temp.support.ECT ? "[ECT]" : "",
+		   ctrl_temp.support.threePTY ? "[3PTY]" : "",
+		   ctrl_temp.support.CF ? "[CF]" : "",
+		   ctrl_temp.support.CD ? "[CD]" : "",
+		   ctrl_temp.support.MCID ? "[MCID]" : "",
+		   ctrl_temp.support.CCBS ? "[CCBS]" : "",
+		   ctrl_temp.support.MWI ? "[MWI]" : "",
+		   ctrl_temp.support.CCNR ? "[CCNR]" : "",
+		   ctrl_temp.support.CONF ? "[CONF]" : "",
+		   ctrl_temp.support.dtmf ? "[DTMF]" : "",
+		   ctrl_temp.support.echo_cancel ? "[echo cancellation]" : "",
+		   ctrl_temp.support.sservices ? "[supplementary]" : "",
+		   ctrl_temp.support.lineinterconnect ? "[line interconnect]" : "");
+
+	cc_mutex_lock(&capi_global_lock);
+	bcopy(&ctrl_temp, &capi_controller[controller_unit], 
+	      sizeof(capi_controller[0]));
+	cc_mutex_unlock(&capi_global_lock);
+
+	return error;
 }
 
 /* post-initialize "chan_capi" */
@@ -7189,6 +7174,8 @@ chan_capi_post_init(struct cc_capi_application *p_app)
 	     controller++) {
 
 	    if (CC_GET_BIT(capi_controller_used_mask, controller)) {
+
+	        chan_capi_fill_controller_info(p_app, controller);
 
 	        if (capi_send_listen_req(p_app, controller, ALL_SERVICES)) {
 
@@ -7706,13 +7693,6 @@ int load_module(void)
 
 	app_locked = 1;
 
-	error = chan_capi_fill_controller_info(p_app);
-
-	if (error) {
-	    goto done;
-	}
-	chan_capi_load_level = 3;
-
 	error = chan_capi_scan_config(cfg);
 
 	if (error) {
@@ -7874,7 +7854,7 @@ int unload_module()
 	case 3:
 	case 2:
 	    cc_mutex_lock(&do_periodic_lock);
-	    for(x = 0; x < CAPI_MAX_CONTROLLERS; x++) {
+	    for(x = 0; x < CAPI_MAX_APPLICATIONS; x++) {
 	        if (capi_application[x]) {
 		    capi_application_free(capi_application[x]);
 		    capi_application[x] = NULL;
@@ -7905,7 +7885,7 @@ int usecount()
 	int cd_root_used = 0;
 	u_int16_t x;
 
-	for(x = 0; x < CAPI_MAX_CONTROLLERS; x++) {
+	for(x = 0; x < CAPI_MAX_APPLICATIONS; x++) {
 
 	    p_app = capi_application[x];
 
