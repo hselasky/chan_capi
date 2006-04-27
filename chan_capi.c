@@ -5122,6 +5122,63 @@ capi_handle_facility_indication(_cmsg *CMSG, struct call_desc **pp_cd)
 	return;
 }
 
+static void
+capi_detect_silence(struct call_desc *cd, u_int8_t *ptr, u_int16_t len)
+{
+    int32_t pbx_capability = cd->pbx_capability;
+    u_int8_t silence;
+    int16_t temp;
+
+    if((cd->flags.dir_outgoing == 0) ||
+       (cd->options.ntmode) ||
+       (cd->state != CAPI_STATE_CONNECTPENDING)) {
+
+        /* should not wait for silence */
+
+        cd->options.wait_silence_samples = 0;
+	goto done;
+    }
+
+    if (pbx_capability == AST_FORMAT_ULAW) {
+        silence = capi_signed_to_ulaw(0);
+    } else {
+        silence = capi_signed_to_alaw(0);
+    }
+
+    while(len--) {
+
+        if (pbx_capability == AST_FORMAT_ULAW) {
+	  temp = capi_ulaw_to_signed[*ptr];
+  	} else {
+	  temp = capi_alaw_to_signed[*ptr];
+	}
+
+	if((temp < 256) && 
+	   (temp > -256)) {
+	    cd->wait_silence_count++;
+	} else {
+	    cd->wait_silence_count = 0;
+	}
+
+	if(cd->wait_silence_count >=
+	   cd->options.wait_silence_samples) {
+
+	    cd_verbose(cd, 1, 0, 3, "Silence detected, "
+		       "switching audio on!\n");
+
+	    cd->options.wait_silence_samples = 0;
+	    break;
+	} else {
+	    *ptr = silence;
+	}
+
+	ptr++;
+    }
+
+ done:
+    return;
+}
+
 /*
  * CAPI DATA_B3_IND
  */
@@ -5170,6 +5227,12 @@ capi_handle_data_b3_indication(_cmsg *CMSG, struct call_desc **pp_cd)
 
 	if (cd->rx_buffer_qlen < 816) {
 		cd->rx_buffer_qlen += b3len;
+	}
+
+	/* wait silence detection */
+
+	if (cd->options.wait_silence_samples) {
+		capi_detect_silence(cd, b3buf, b3len);
 	}
 
 	/* software echo cancellation */
@@ -7296,6 +7359,9 @@ capi_parse_iface_config(struct ast_variable *v, const char *name)
 	    CONF_GET_STRING(v, cep->accountcode, "accountcode");
 	    CONF_GET_STRING(v, cep->language, "language");
 
+	    CONF_GET_INTEGER(v, cep->options.wait_silence_samples, 
+			     "wait_silence_samples");
+
 	    CONF_GET_INTEGER(v, cep->options.digit_time_out, "digit_timeout");
 
 	    CONF_GET_TRUE(v, cep->options.dtmf_detect_in_software, "softdtmf", 1);
@@ -7570,7 +7636,8 @@ chan_capi_scan_config(struct ast_config *cfg)
 		cc_verbose(4, 0, VERBOSE_PREFIX_2 "Reading config "
 			   "for %s\n", cat);
 
-		cep = capi_parse_iface_config(ast_variable_browse(cfg, cat), cat);
+		cep = capi_parse_iface_config(ast_variable_browse(cfg, cat), 
+					      cat);
 
 		if (cep) {
 		    cep_root_prepend(cep);

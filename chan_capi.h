@@ -328,6 +328,9 @@ struct cc_capi_options {
 	/* CAPI digit timeout, in seconds */
 	u_int16_t digit_time_out;
 
+	/* CAPI wait silence, in samples */
+	u_int16_t wait_silence_samples;
+
 	/* CAPI hold type */
 	u_int8_t hold_type;
 };
@@ -537,7 +540,8 @@ struct call_desc {
 	u_int16_t tx_queue_len;
 
 	/*! CAPI receive buffer */
-	u_int8_t  rx_buffer_data[(CAPI_MAX_B3_BLOCK_SIZE + AST_FRIENDLY_OFFSET)*CAPI_MAX_B3_BLOCKS];
+	u_int8_t  rx_buffer_data[(CAPI_MAX_B3_BLOCK_SIZE + 
+				  AST_FRIENDLY_OFFSET)*CAPI_MAX_B3_BLOCKS];
 	u_int16_t rx_buffer_handle;
 	int16_t   rx_buffer_qlen;
 	u_int16_t rx_noise_count;
@@ -569,6 +573,9 @@ struct call_desc {
 
 	/* last received DTMF digit */
 	int last_dtmf_digit;
+
+	/* current number of silence bytes */
+	u_int16_t wait_silence_count;
 
 	/* --- END OF ZERO DEFAULT REGION --- */
 
