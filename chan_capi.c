@@ -155,7 +155,7 @@ static const u_int8_t sending_not_complete_struct[] = { 2, 0, 0 };
 extern const char *capi_info_string(u_int16_t wInfo);
 
 /*===========================================================================*
- * software echo cancelling
+ * software echo suppression
  *===========================================================================*/
 
 /* routine to compute the square root */
@@ -202,16 +202,16 @@ sqrt_32(u_int32_t a) {
 #define EC_FACTOR_MAX 0x100
 
 static int32_t
-soft_echo_cancel_get_factor(struct call_desc *cd,
-			    struct soft_echo_cancel *rx,
-			    struct soft_echo_cancel *tx)
+soft_echo_suppress_get_factor(struct call_desc *cd,
+			      struct soft_echo_suppress *rx,
+			      struct soft_echo_suppress *tx)
 {
     u_int16_t rx_power = rx->power_avg[rx->offset];
     u_int16_t tx_power = ((tx->stuck < EC_STUCK_OFFSET) ? 
 			  tx->power_avg[tx->offset] : 0);
     int32_t factor;
 
-    if(cd->options.echo_cancel_fax) {
+    if(cd->options.echo_suppress_fax) {
 
         /* assure simplex sound */
 
@@ -246,7 +246,7 @@ soft_echo_cancel_get_factor(struct call_desc *cd,
 	    } else {
 	        rx->active = 1;
 
-		/* activate the echo canceller
+		/* activate the echo suppressor
 		 *
 		 * NOTE: typical "rx_power:tx_power" 
 		 * ratio when only echo is received 
@@ -300,12 +300,12 @@ static const int16_t cos_2100_demux[80] = {
   0x678d, 0x42e0, 0x8df5, 0xcf05, 0x79bb, 0x1de1, 0x8195, 0xf5f6, };
 
 static void
-soft_echo_cancel_process(struct call_desc *cd, struct soft_echo_cancel *rx, 
-			 struct soft_echo_cancel *tx, u_int8_t *ptr, 
-			 u_int16_t len)
+soft_echo_suppress_process(struct call_desc *cd, struct soft_echo_suppress *rx, 
+			   struct soft_echo_suppress *tx, u_int8_t *ptr, 
+			   u_int16_t len)
 {
     int32_t pbx_capability = cd->pbx_capability;
-    int32_t sound_factor = soft_echo_cancel_get_factor(cd, rx, tx);
+    int32_t sound_factor = soft_echo_suppress_get_factor(cd, rx, tx);
     int32_t noise_factor = ((tx->stuck < EC_STUCK_OFFSET) ? 
 			    tx->power_avg[tx->offset] : 0) / 256;
     int32_t temp;
@@ -403,7 +403,7 @@ soft_echo_cancel_process(struct call_desc *cd, struct soft_echo_cancel *rx,
 #if 0
 	    cc_log(LOG_NOTICE, "FAX amplitude: %s d=%d t=0x%08x r=0x%08x %d\n", 
 		   (rx > tx) ? "                             " : "",
-		   cd->options.echo_cancel_fax, temp, dr, temp - dr);
+		   cd->options.echo_suppress_fax, temp, dr, temp - dr);
 #endif
 	    /*
 	     * detect 2100 +/- 16.7 Hz 
@@ -415,14 +415,14 @@ soft_echo_cancel_process(struct call_desc *cd, struct soft_echo_cancel *rx,
 	    {
 	        rx->sincos_2100_count_2++;
 
-	        /* disable the echo canceller */
+	        /* disable the echo suppressor */
 
 	        if((rx->sincos_2100_count_2 >= 20) &&
-		   (cd->options.echo_cancel_fax == 0)) {
-		   cd->options.echo_cancel_fax = 1;
+		   (cd->options.echo_suppress_fax == 0)) {
+		   cd->options.echo_suppress_fax = 1;
 
 		   cd_verbose(cd, 1, 0, 3, "FAX tone detected, "
-			      "switching echo supressor!\n");
+			      "switching echo suppressor!\n");
 		}
 	    }
 	    else
@@ -468,7 +468,7 @@ soft_echo_cancel_process(struct call_desc *cd, struct soft_echo_cancel *rx,
 
 	    /* store RX power */
 
-	    for(x = cd->options.echo_cancel_offset; x--; ) {
+	    for(x = cd->options.echo_suppress_offset; x--; ) {
 
 	      y = (x + rx->offset) % EC_WINDOW_COUNT;
 
@@ -479,7 +479,7 @@ soft_echo_cancel_process(struct call_desc *cd, struct soft_echo_cancel *rx,
 
 	    /* get next value */
 
-	    sound_factor = soft_echo_cancel_get_factor(cd, rx, tx);
+	    sound_factor = soft_echo_suppress_get_factor(cd, rx, tx);
 
 	    rx->power_acc = 0;
 	    rx->samples = 0;
@@ -489,6 +489,11 @@ soft_echo_cancel_process(struct call_desc *cd, struct soft_echo_cancel *rx,
     }
     return;
 }
+
+/*===========================================================================*
+ * software echo cancelling
+ *===========================================================================*/
+
 
 /*===========================================================================*
  * various CAPI helper functions
@@ -3201,7 +3206,7 @@ capi_send_echo_cancel_req(struct call_desc *cd, u_int16_t function)
 
     if (cd->flags.disconnect_received ||
 	(!cd->support.echo_cancel) || 
-	(!cd->options.echo_cancel_enabled)) {
+	(!cd->options.echo_cancel_in_hardware)) {
         return 0;
     }
 
@@ -4294,13 +4299,13 @@ __chan_capi_write(struct call_desc *cd, struct ast_frame *frame)
 	      capi_copy_sound(fsmooth->data, buf, fsmooth->datalen, 
 			      cd->cep ? cd->cep->tx_convert : NULL);
 
-	      /* software echo cancellation */
+	      /* software echo suppression */
 
-	      if (cd->options.echo_cancel_in_software) {
-		  soft_echo_cancel_process(cd, 
-					   &cd->soft_ec_tx, 
-					   &cd->soft_ec_rx, 
-					   buf, fsmooth->datalen);
+	      if (cd->options.echo_suppress_in_software) {
+		  soft_echo_suppress_process(cd, 
+					     &cd->soft_ec_tx, 
+					     &cd->soft_ec_rx, 
+					     buf, fsmooth->datalen);
 	      }
 
 	      if (cd->rx_buffer_qlen > 0) {
@@ -5235,13 +5240,13 @@ capi_handle_data_b3_indication(_cmsg *CMSG, struct call_desc **pp_cd)
 		capi_detect_silence(cd, b3buf, b3len);
 	}
 
-	/* software echo cancellation */
+	/* software echo suppression */
 
-	if (cd->options.echo_cancel_in_software) {
-		soft_echo_cancel_process(cd,
-					 &cd->soft_ec_rx, 
-					 &cd->soft_ec_tx, 
-					 b3buf, b3len);
+	if (cd->options.echo_suppress_in_software) {
+		soft_echo_suppress_process(cd,
+					   &cd->soft_ec_rx, 
+					   &cd->soft_ec_tx, 
+					   b3buf, b3len);
 	}
 
 	/* convert sound last */
@@ -6361,20 +6366,20 @@ chan_capi_cmd_echosquelch(struct call_desc *cd, struct call_desc *cd_unknown,
 	cc_mutex_assert(&cd->p_app->lock, MA_OWNED);
 
 	if (strcmp(param, "fax") == 0) {
-		cd->options.echo_cancel_fax = 1;
-		cd->options.echo_cancel_in_software = 1;
+		cd->options.echo_suppress_fax = 1;
+		cd->options.echo_suppress_in_software = 1;
 	} else if (ast_true(param)) {
-		cd->options.echo_cancel_in_software = 1;
+		cd->options.echo_suppress_in_software = 1;
 	} else if (ast_false(param)) {
-		cd->options.echo_cancel_in_software = 0;
+		cd->options.echo_suppress_in_software = 0;
 	} else {
 		cd_log(cd, LOG_WARNING, "Parameter, '%s', for "
 		       "echosquelch is invalid.\n", param);
 		return -1;
 	}
 	cd_verbose(cd, 2, 1, 4, "echosquelch switched %s%s\n",
-		   cd->options.echo_cancel_in_software ? "ON" : "OFF",
-		   cd->options.echo_cancel_fax ? " (FAX)" : "");
+		   cd->options.echo_suppress_in_software ? "ON" : "OFF",
+		   cd->options.echo_suppress_fax ? " (FAX)" : "");
 	return 0;
 }
 
@@ -7337,7 +7342,7 @@ capi_parse_iface_config(struct ast_variable *v, const char *name)
 	cep->options.echo_cancel_option = EC_OPTION_DISABLE_G165;
 	cep->options.echo_cancel_tail = EC_DEFAULT_TAIL;
 	cep->options.echo_cancel_selector = FACILITYSELECTOR_ECHO_CANCEL;
-	cep->options.echo_cancel_offset = EC_POWER_OFFSET;
+	cep->options.echo_suppress_offset = EC_POWER_OFFSET;
 
 	for (; v; v = v->next) {
 	    CONF_GET_INTEGER(v, b_channels_max, "devices");
@@ -7393,14 +7398,14 @@ capi_parse_iface_config(struct ast_variable *v, const char *name)
 	    }
 
 	    CONF_GET_TRUE(v, cep->options.immediate, "immediate", 1);
-	    CONF_GET_TRUE(v, cep->options.echo_cancel_in_software, "echosquelch", 1);
+	    CONF_GET_TRUE(v, cep->options.echo_suppress_in_software, "echosquelch", 1);
 	    CONF_GET_TRUE(v, cep->options.bridge, "bridge", 1);
 	    CONF_GET_TRUE(v, cep->options.ntmode, "ntmode", 1);
 
 	    if((!strcasecmp(v->name, "echosquelch")) &&
 	       (!strcmp(v->value, "fax"))) {
-	        cep->options.echo_cancel_fax = 1;
-		cep->options.echo_cancel_in_software = 1;
+	        cep->options.echo_suppress_fax = 1;
+		cep->options.echo_suppress_in_software = 1;
 		continue;
 	    }
 
@@ -7433,24 +7438,28 @@ capi_parse_iface_config(struct ast_variable *v, const char *name)
 
 	    if (!strcasecmp(v->name, "echocancel")) {
 	        if (ast_true(v->value)) {
-		    cep->options.echo_cancel_enabled = 1;
+		    cep->options.echo_cancel_in_hardware = 1;
 		    cep->options.echo_cancel_option = EC_OPTION_DISABLE_G165;
 		}	
 		else if (ast_false(v->value)) {
-		    cep->options.echo_cancel_enabled = 0;
+		    cep->options.echo_cancel_in_hardware = 0;
 		    cep->options.echo_cancel_option = 0;
 		}	
 		else if (!strcasecmp(v->value, "g165") || !strcasecmp(v->value, "g.165")) {
-		    cep->options.echo_cancel_enabled = 1;
+		    cep->options.echo_cancel_in_hardware = 1;
 		    cep->options.echo_cancel_option = EC_OPTION_DISABLE_G165;
 		}	
 		else if (!strcasecmp(v->value, "g164") || !strcasecmp(v->value, "g.164")) {
-		    cep->options.echo_cancel_enabled = 1;
+		    cep->options.echo_cancel_in_hardware = 1;
 		    cep->options.echo_cancel_option = EC_OPTION_DISABLE_G164_OR_G165;
 		}	
 		else if (!strcasecmp(v->value, "force")) {
-		    cep->options.echo_cancel_enabled = 1;
+		    cep->options.echo_cancel_in_hardware = 1;
 		    cep->options.echo_cancel_option = EC_OPTION_DISABLE_NEVER;
+		}
+		else if((!strcasecmp(v->value, "soft")) ||
+			(!strcasecmp(v->value, "software"))) {
+		    cep->options.echo_cancel_in_software = 1;
 		}
 		else {
 		    cc_log(LOG_ERROR, "Unknown echocancel parameter \"%s\" (ignored)\n", v->value);
@@ -7467,12 +7476,12 @@ capi_parse_iface_config(struct ast_variable *v, const char *name)
 	    }
 
 	    if (!strcasecmp(v->name, "echo_offset")) {
-	        cep->options.echo_cancel_offset = atoi(v->value);
-		if (cep->options.echo_cancel_offset < 1) {
-		    cep->options.echo_cancel_offset = 1;
+	        cep->options.echo_suppress_offset = atoi(v->value);
+		if (cep->options.echo_suppress_offset < 1) {
+		    cep->options.echo_suppress_offset = 1;
 		}
-		if (cep->options.echo_cancel_offset > EC_WINDOW_COUNT) {
-		    cep->options.echo_cancel_offset = EC_WINDOW_COUNT;
+		if (cep->options.echo_suppress_offset > EC_WINDOW_COUNT) {
+		    cep->options.echo_suppress_offset = EC_WINDOW_COUNT;
 		} 
 		continue;
 	    }
@@ -7515,10 +7524,10 @@ capi_parse_iface_config(struct ast_variable *v, const char *name)
 		   cep->b_channels_max,
 		   cep->controller_first,
 		   cep->controller_last,
-		   cep->options.echo_cancel_enabled, 
+		   cep->options.echo_cancel_in_hardware, 
 		   cep->options.echo_cancel_option, 
 		   cep->options.echo_cancel_tail,
-		   cep->options.echo_cancel_in_software, 
+		   cep->options.echo_suppress_in_software, 
 		   cep->rx_gain,
 		   cep->tx_gain, 
 		   cep->call_group);

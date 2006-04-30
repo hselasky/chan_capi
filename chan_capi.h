@@ -299,17 +299,22 @@ struct cc_capi_options {
 	/* set if line interconnect is allowed: */
 	u_int32_t bridge : 1;
 
-	/* set if echo canceling is enabled */
-	u_int32_t echo_cancel_enabled : 1;
+	/* set if hardware echo canceling is enabled */
+	u_int32_t echo_cancel_in_hardware : 1;
 
-	/* set if echo canceling should be done in software.
-	 * Else in hardware:
-	 */
+	/* set if software echo canceling is enabled */
 	u_int32_t echo_cancel_in_software : 1;
 
-	/* set if echo canceling has detected a FAX:
+	/* set if software echo suppression is enabled */
+	u_int32_t echo_suppress_in_software : 1;
+
+	/* set if echo suppression has detected a FAX */
+	u_int32_t echo_suppress_fax : 1;
+
+	/* echo suppression offset, 
+	 * in units of EC_WINDOW_LEN bytes:
 	 */
-	u_int32_t echo_cancel_fax : 1;
+	u_int16_t echo_suppress_offset;
 
 	/* set if DTMF detection should be done in software. 
 	 * Else in hardware:
@@ -319,11 +324,10 @@ struct cc_capi_options {
 	/* set if relaxed DTMF detection should be done */
 	u_int32_t dtmf_detect_relax : 1;
 
-	/* CAPI echo cancel parameters */
+	/* CAPI echo cancel parameters (active CAPI devices) */
 	u_int16_t echo_cancel_option;
 	u_int16_t echo_cancel_tail;
 	u_int16_t echo_cancel_selector;
-	u_int16_t echo_cancel_offset; /* in units of EC_WINDOW_LEN */
 
 	/* CAPI digit timeout, in seconds */
 	u_int16_t digit_time_out;
@@ -423,7 +427,7 @@ struct config_entry_iface {
 #define EC_STUCK_OFFSET       24  /* windows */
 #define EC_NOISE_PRIME  0xffff1d
 
-struct soft_echo_cancel {
+struct soft_echo_suppress {
   u_int32_t power_acc; /* total accumulated power */
   u_int16_t power_avg[EC_WINDOW_COUNT]; /* average power */
   u_int16_t samples;   /* number of samples accumulated */
@@ -546,9 +550,9 @@ struct call_desc {
 	int16_t   rx_buffer_qlen;
 	u_int16_t rx_noise_count;
 
-	/*! CAPI software echo cancel */
-	struct soft_echo_cancel soft_ec_rx;
-	struct soft_echo_cancel soft_ec_tx;
+	/*! CAPI software echo suppression */
+	struct soft_echo_suppress soft_ec_rx;
+	struct soft_echo_suppress soft_ec_tx;
 
 	/*! CAPI hangup cause received */
 	u_int16_t wCause_in;
