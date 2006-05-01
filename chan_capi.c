@@ -155,6 +155,119 @@ static const u_int8_t sending_not_complete_struct[] = { 2, 0, 0 };
 extern const char *capi_info_string(u_int16_t wInfo);
 
 /*===========================================================================*
+ * ring buffer routines
+ *===========================================================================*/
+
+static void
+buf_init(struct ring_buffer *buffer)
+{
+    bzero(buffer, sizeof(*buffer));
+    buffer->end_pos = sizeof(buffer->data);
+    buffer->last_byte = 0xFF; /* ISDN default */
+
+    buffer->bf_free_len = FIFO_BF_SIZE;
+    buffer->ec_free_len = FIFO_EC_SIZE;
+    return;
+}
+
+static void
+buf_write_block(struct ring_buffer *buffer, 
+		const u_int8_t *data, u_int16_t len_data)
+{
+    u_int16_t len_max = buffer->end_pos - buffer->bf_write_pos;
+    u_int16_t temp;
+
+    if (len_data > buffer->bf_free_len) {
+
+        /* data overflow */
+
+        len_data = buffer->bf_free_len;
+    }
+
+    /* update echo canceller counters */
+
+    if (len_data > buffer->ec_free_len) {
+
+	temp = len_data - buffer->ec_free_len;
+
+	if(temp > buffer->ec_offset) {
+	    buffer->ec_offset = 0;
+	} else {
+	    buffer->ec_offset -= temp;
+	}
+
+	buffer->ec_read_pos += temp;
+
+	if(buffer->ec_read_pos >= buffer->end_pos) {
+	   buffer->ec_read_pos -= buffer->end_pos;
+	}
+
+	buffer->ec_used_len += buffer->ec_free_len;
+	buffer->ec_free_len = 0;
+
+    } else {
+
+	buffer->ec_free_len -= len_data;
+	buffer->ec_used_len += len_data;
+    }
+
+    /* update free data length */
+
+    buffer->bf_free_len -= len_data;
+    buffer->bf_used_len += len_data;
+
+    /* copy data */
+
+    if(len_data >= len_max) {
+
+	/* wrapped write */
+
+	bcopy(data, &(buffer->data[buffer->bf_write_pos]), len_max);
+
+	buffer->bf_write_pos = 0;
+	len_data -= len_max;
+	data += len_max;
+    }
+
+    bcopy(data, &buffer->data[buffer->bf_write_pos], len_data);
+    buffer->bf_write_pos += len_data;
+    return;
+}
+
+static void
+buf_read_block(struct ring_buffer *buffer, void **p_ptr, u_int16_t *p_len)
+{
+    u_int8_t temp[FIFO_BLOCK_SIZE];
+    u_int16_t len;
+
+    if(buffer->bf_used_len < FIFO_BLOCK_SIZE) {
+
+        /* data underflow */
+
+        len = FIFO_BLOCK_SIZE - buffer->bf_used_len;
+
+        memset(temp, buffer->last_byte, len);
+
+        buf_write_block(buffer, temp, len);
+    }
+
+    *p_ptr = &(buffer->data[buffer->bf_read_pos]);
+    *p_len = FIFO_BLOCK_SIZE;
+
+    if(buffer->bf_used_len >= FIFO_BLOCK_SIZE) {
+	buffer->bf_used_len -= FIFO_BLOCK_SIZE;
+	buffer->bf_free_len += FIFO_BLOCK_SIZE;
+    }
+
+    buffer->bf_read_pos += FIFO_BLOCK_SIZE;
+
+    if (buffer->bf_read_pos >= buffer->end_pos) {
+        buffer->bf_read_pos -= buffer->end_pos;
+    }
+    return;
+}
+
+/*===========================================================================*
  * software echo suppression
  *===========================================================================*/
 
@@ -424,9 +537,7 @@ soft_echo_suppress_process(struct call_desc *cd, struct soft_echo_suppress *rx,
 		   cd_verbose(cd, 1, 0, 3, "FAX tone detected, "
 			      "switching echo suppressor!\n");
 		}
-	    }
-	    else
-	    {
+	    } else {
 	        rx->sincos_2100_count_2 = 0;
 	    }
 
@@ -1335,11 +1446,11 @@ capi_application_alloc()
 	return NULL;
     }
 #if (CAPI_OS_HINT == 2)
-    error = capi20_register(CAPI_BCHANS, CAPI_MAX_B3_BLOCKS,
+    error = capi20_register(CAPI_BCHANS, (CAPI_MAX_B3_BLOCKS+1)/2,
 			    CAPI_MAX_B3_BLOCK_SIZE, &app_id,
 			    CAPI_STACK_VERSION);
 #else
-    error = capi20_register(CAPI_BCHANS, CAPI_MAX_B3_BLOCKS,
+    error = capi20_register(CAPI_BCHANS, (CAPI_MAX_B3_BLOCKS+1)/2,
 			    CAPI_MAX_B3_BLOCK_SIZE, &app_id);
 #endif
     if (error) {
@@ -1696,11 +1807,6 @@ cd_root_shrink(struct call_desc *cd)
         cd->pbx_dsp = NULL;
     }
 
-    if (cd->pbx_smoother) {
-        ast_smoother_free(cd->pbx_smoother);
-	cd->pbx_smoother = NULL;
-    }
-
     free(cd);
 
     return;
@@ -1723,13 +1829,6 @@ cd_root_grow(struct cc_capi_application *p_app)
         bzero(cd, sizeof(*cd));
 
 	cd->p_app = p_app;
-
-        cd->pbx_smoother = ast_smoother_new(CAPI_MAX_B3_BLOCK_SIZE);
-
-	if (cd->pbx_smoother == NULL) {
-	    cd_root_shrink(cd);
-	    return NULL;
-	}
 
 	cd->pbx_dsp = ast_dsp_new();
 
@@ -2326,11 +2425,8 @@ cd_alloc(struct cc_capi_application *p_app, u_int16_t plci)
 
     /* initialize call descriptor */
 
-    ast_smoother_reset(cd->pbx_smoother, CAPI_MAX_B3_BLOCK_SIZE);
-
     cd->msg_plci = plci;
     cd->digit_time_last = p_app->application_uptime;
-    cd->rx_buffer_qlen = 416; /* assume that the buffer is empty */
     cd->white_noise_rem = 1;
 
     cc_mutex_lock(&capi_global_lock);
@@ -4234,8 +4330,7 @@ __chan_capi_read(struct call_desc *cd)
 static int
 __chan_capi_write(struct call_desc *cd, struct ast_frame *frame)
 {
-	struct ast_frame *fsmooth;
-	u_int8_t *buf;
+	void *ptr;
 
 	if ((!(cd->flags.b3_active)) || 
 	    (!(cd->msg_ncci))) {
@@ -4263,7 +4358,8 @@ __chan_capi_write(struct call_desc *cd, struct ast_frame *frame)
 		goto done;
 	}
 
-	if (cd->flags.fax_receiving || cd->flags.fax_pending) {
+	if (cd->flags.fax_receiving || 
+	    cd->flags.fax_pending) {
 		cd_verbose(cd, 3, 1, 2, "receiving a FAX, write ignored!\n");
 		goto done;
 	}
@@ -4275,53 +4371,30 @@ __chan_capi_write(struct call_desc *cd, struct ast_frame *frame)
 	}
 
 	if ((!frame->data) || 
-	    (!frame->datalen) || 
-	    (!cd->pbx_smoother)) {
-
+	    (!frame->datalen)) {
 		cd_verbose(cd, 3, 0, 2, "No data for voice frame\n");
 		goto done;
 	}
 
-	if (ast_smoother_feed(cd->pbx_smoother, frame) != 0) {
+	ptr = alloca(frame->datalen);
 
-		cd_verbose(cd, 3, 0, 2, "Failed to fill smoother\n");
-		goto done;
+	/* compute new amplitude */
+
+	capi_copy_sound(frame->data, ptr, frame->datalen,
+			cd->cep ? cd->cep->tx_convert : NULL);
+
+	/* software echo suppression */
+
+	if (cd->options.echo_suppress_in_software) {
+	    soft_echo_suppress_process(cd, 
+				       &cd->soft_ec_tx, 
+				       &cd->soft_ec_rx, ptr, frame->datalen);
 	}
 
-	while(1) {
+	/* write data to ring buffer */
 
-	      fsmooth = ast_smoother_read(cd->pbx_smoother);
+	buf_write_block(&(cd->ring_buf), ptr, frame->datalen);
 
-	      if (fsmooth == NULL) break;
-
-	      buf = &(cd->tx_buffer_data[(cd->tx_buffer_handle % CAPI_MAX_B3_BLOCKS) * CAPI_MAX_B3_BLOCK_SIZE]);
-
-	      capi_copy_sound(fsmooth->data, buf, fsmooth->datalen, 
-			      cd->cep ? cd->cep->tx_convert : NULL);
-
-	      /* software echo suppression */
-
-	      if (cd->options.echo_suppress_in_software) {
-		  soft_echo_suppress_process(cd, 
-					     &cd->soft_ec_tx, 
-					     &cd->soft_ec_rx, 
-					     buf, fsmooth->datalen);
-	      }
-
-	      if (cd->rx_buffer_qlen > 0) {
-
-		  if (capi_send_data_b3_req(cd, cd->tx_buffer_handle, buf, fsmooth->datalen) == 0) {
-
-		      cd->tx_buffer_handle++;
-		      cd->rx_buffer_qlen -= fsmooth->datalen;
-		      if (cd->rx_buffer_qlen < 0)
-		          cd->rx_buffer_qlen = 0;
-		  }
-
-	      } else {
-		  cd_verbose(cd, 3, 1, 4, "Too much voice to send\n");
-	      }
-	}
  done:
 	return 0;
 }
@@ -5230,10 +5303,6 @@ capi_handle_data_b3_indication(_cmsg *CMSG, struct call_desc **pp_cd)
 		return;
 	}
 
-	if (cd->rx_buffer_qlen < 816) {
-		cd->rx_buffer_qlen += b3len;
-	}
-
 	/* wait silence detection */
 
 	if (cd->options.wait_silence_samples) {
@@ -5255,6 +5324,43 @@ capi_handle_data_b3_indication(_cmsg *CMSG, struct call_desc **pp_cd)
 			cd->cep ? cd->cep->rx_convert : NULL);
 
 	cd_send_pbx_voice(cd, b3buf, b3len);
+	return;
+}
+
+/*
+ * CAPI DATA_B3_CONF
+ */
+static void
+capi_handle_data_b3_confirmation(struct call_desc *cd, u_int16_t wInfo)
+{
+	void *ptr;
+	u_int16_t len;
+
+	if (cd->flags.fax_receiving || 
+	    cd->flags.fax_pending) {
+		cd_verbose(cd, 3, 1, 2, "receiving a FAX, "
+			   "data confirmation ignored!\n");
+		return;
+	}
+
+	if(cd->flags.b3_active == 0) {
+		cd_verbose(cd, 3, 1, 2, "B3 is not active, "
+			   "data confirmation ignored!\n");
+		return;
+	}
+
+	if(wInfo) {
+		cd_verbose(cd, 3, 1, 2, "Received an error, "
+			   "data confirmation ignored!\n");
+		return;
+	}
+
+	/* feed more data */
+
+	buf_read_block(&(cd->ring_buf), &ptr, &len);
+
+	capi_send_data_b3_req(cd, 0, ptr, len);
+
 	return;
 }
 
@@ -5307,6 +5413,7 @@ static void
 capi_handle_connect_b3_active_indication(_cmsg *CMSG, struct call_desc **pp_cd)
 {
 	struct call_desc *cd = *pp_cd;
+	u_int8_t temp;
 	_cmsg CMSG2;
 
 	/* then send a CONNECT_B3_ACTIVE_RESP */
@@ -5323,7 +5430,16 @@ capi_handle_connect_b3_active_indication(_cmsg *CMSG, struct call_desc **pp_cd)
 	cd->flags.b3_active = 1;
 	cd->flags.b3_pending = 0;
 
-	if (cd->flags.fax_pending || cd->flags.fax_receiving) {
+	buf_init(&(cd->ring_buf));
+
+	for(temp = 0; temp < FIFO_BLOCK_START; temp++) {
+
+	    capi_handle_data_b3_confirmation(cd, 0);
+
+	}
+
+	if (cd->flags.fax_pending || 
+	    cd->flags.fax_receiving) {
 		cd_verbose(cd, 3, 1, 3, "FAX connected!\n");
 
 		cd->flags.fax_pending = 0;
@@ -6099,6 +6215,7 @@ capi_handle_cmsg(struct cc_capi_application *p_app, _cmsg *CMSG)
 		break;
 	case CAPI_P_CONF(DATA_B3):
 		wInfo = DATA_B3_CONF_INFO(CMSG);
+		capi_handle_data_b3_confirmation(cd, wInfo);
 		break;
  
 	case CAPI_P_CONF(DISCONNECT):

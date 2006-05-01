@@ -42,6 +42,28 @@
 #define CAPI_BCHANS                     120
 #define ALL_SERVICES             0x1FFF03FF
 
+#define FIFO_BLOCK_START ((CAPI_MAX_B3_BLOCKS+1)/2) /* blocks */
+#define FIFO_BLOCK_SIZE  (CAPI_MAX_B3_BLOCK_SIZE) /* bytes */
+#define FIFO_BF_SIZE     (CAPI_MAX_B3_BLOCKS * FIFO_BLOCK_SIZE) /* bytes */
+#define FIFO_EC_SIZE     (4 * CAPI_MAX_B3_BLOCKS * FIFO_BLOCK_SIZE) /* bytes */
+
+struct ring_buffer {
+    u_int8_t  data[FIFO_EC_SIZE];
+
+    u_int16_t bf_read_pos;
+    u_int16_t bf_write_pos;
+    u_int16_t bf_free_len;
+    u_int16_t bf_used_len;
+
+    u_int16_t ec_read_pos;
+    u_int16_t ec_offset;
+    u_int16_t ec_free_len;
+    u_int16_t ec_used_len;
+
+    u_int16_t end_pos;
+    u_int8_t  last_byte;
+};
+
 /*
  * helper for ast_verbose with different verbose settings
  */
@@ -452,9 +474,6 @@ struct cc_capi_application;
 
 struct call_desc {
 
-	/*! PBX smoother pointer */
-	struct ast_smoother *pbx_smoother;
-
 	/*! PBX DSP pointer */
 	struct ast_dsp *pbx_dsp;
 
@@ -470,6 +489,8 @@ struct call_desc {
 	 * all variables in this region!
 	 */
 	u_int8_t dummy_zero_start[1];
+
+	struct ring_buffer ring_buf;
 
 	/*! PBX capability */
 	int pbx_capability;
@@ -536,10 +557,6 @@ struct call_desc {
 	 */
 	u_int16_t dst_strip_len;
 
-	/*! CAPI transmit buffer */
-	u_int8_t  tx_buffer_data[CAPI_MAX_B3_BLOCKS * CAPI_MAX_B3_BLOCK_SIZE];
-	u_int16_t tx_buffer_handle;
-
 	/*! CAPI transmit queue length */
 	u_int16_t tx_queue_len;
 
@@ -547,7 +564,6 @@ struct call_desc {
 	u_int8_t  rx_buffer_data[(CAPI_MAX_B3_BLOCK_SIZE + 
 				  AST_FRIENDLY_OFFSET)*CAPI_MAX_B3_BLOCKS];
 	u_int16_t rx_buffer_handle;
-	int16_t   rx_buffer_qlen;
 	u_int16_t rx_noise_count;
 
 	/*! CAPI software echo suppression */
