@@ -3941,8 +3941,13 @@ __chan_capi_call(struct call_desc *cd, const char *idest, int timeout)
 	}
 #endif
 #ifdef CONNECT_REQ_DISPLAY
-	if ((p = pbx_builtin_getvar_helper(pbx_chan, "DISPLAY"))) {
+	p = pbx_builtin_getvar_helper(pbx_chan, "DISPLAY");
 
+	if (p == NULL) {
+	    p = pbx_chan->cid.cid_name;
+	}
+
+	if (p) {
 	    capi_build_struct(&display, sizeof(display), 
 			      p, strlen(p), NULL, 0, NULL, 0);
 
