@@ -6000,6 +6000,7 @@ capi_handle_facility_confirmation_cd(_cmsg *CMSG, struct call_desc **pp_cd)
 	struct call_desc *cd = *pp_cd;
 	u_int16_t wSelector = FACILITY_CONF_FACILITYSELECTOR(CMSG);
 	const void *parm = FACILITY_CONF_FACILITYCONFIRMATIONPARAMETER(CMSG);
+	u_int16_t wTemp;
 
 	if (wSelector == FACILITYSELECTOR_DTMF) {
 		cd_verbose(cd, 2, 1, 4, "DTMF CONF\n");
@@ -6034,14 +6035,17 @@ capi_handle_facility_confirmation_cd(_cmsg *CMSG, struct call_desc **pp_cd)
 	}
 	if (wSelector == FACILITYSELECTOR_LINE_INTERCONNECT) {
 
-		if ((capi_get_1(parm,0) == 0x01) &&
-		    (capi_get_1(parm,1) == 0x00)) {
-			/* enable */
-			capi_show_info(capi_get_2(parm,7));
+		wTemp = capi_get_2(parm,0);
 
-		} else {
+		if (wTemp == 0x0001) {
+
+			/* enable */
+			capi_show_info(capi_get_2(parm,11));
+
+		} else if (wTemp == 0x0002) {
+
 			/* disable */
-			capi_show_info(capi_get_2(parm,7));
+			capi_show_info(capi_get_2(parm,11));
 		}
 		return;
 	}
