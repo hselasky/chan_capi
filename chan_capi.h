@@ -46,6 +46,8 @@
 #define FIFO_BLOCK_SIZE  (CAPI_MAX_B3_BLOCK_SIZE) /* bytes */
 #define FIFO_BF_SIZE     (CAPI_MAX_B3_BLOCKS * FIFO_BLOCK_SIZE) /* bytes */
 #define FIFO_EC_SIZE     (4 * CAPI_MAX_B3_BLOCKS * FIFO_BLOCK_SIZE) /* bytes */
+#define FIFO_EC_TAPS     128
+#define FIFO_EC_DP       (1<<12) /* coefficient decimal point */
 
 struct ring_buffer {
     u_int8_t  data[FIFO_EC_SIZE];
@@ -490,10 +492,14 @@ struct call_desc {
 	 */
 	u_int8_t dummy_zero_start[1];
 
+	/*! CAPI echo canceller ring buffer */
 	struct ring_buffer ring_buf;
 
+	/*! CAPI echo canceller coefficients */
+	int16_t echo_cancel_coeff[FIFO_EC_TAPS];
+
 	/*! PBX capability */
-	int pbx_capability;
+	int32_t pbx_capability;
 
 	/*! PBX temporary read frame */
 	struct ast_frame pbx_rd;

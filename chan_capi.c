@@ -604,7 +604,86 @@ soft_echo_suppress_process(struct call_desc *cd, struct soft_echo_suppress *rx,
 /*===========================================================================*
  * software echo cancelling
  *===========================================================================*/
+static void
+soft_echo_cancel(struct call_desc *cd, u_int8_t *ptr1, u_int16_t len1)
+{
+    int32_t pbx_capability = cd->pbx_capability;
+    u_int16_t offset;
+    u_int16_t x;
+      int32_t sample;
+    int16_t   data[FIFO_EC_SIZE];
 
+    len1 += FIFO_EC_TAPS;
+
+    if (len1 > FIFO_EC_SIZE) {
+        /* should not happen */
+        cc_log(LOG_NOTICE, "len1 (%d) > FIFO_EC_SIZE (%d)\n",
+	       len1, FIFO_EC_SIZE);
+	return;
+    }
+
+    offset = (cd->ring_buf.ec_used_len -
+	      cd->ring_buf.ec_offset - len1);
+
+    if (offset < cd->ring_buf.end_pos) {
+
+        offset = (cd->ring_buf.ec_offset + 
+		  cd->ring_buf.ec_read_pos);
+
+	for(x = 0; x < len1; x++) {
+
+	    if (offset >= cd->ring_buf.end_pos) {
+	        offset -= cd->ring_buf.end_pos;
+	    }
+
+	    if (pbx_capability == AST_FORMAT_ULAW) {
+	      data[x] = capi_ulaw_to_signed[cd->ring_buf.data[offset]];
+	    } else {
+	      data[x] = capi_alaw_to_signed[cd->ring_buf.data[offset]];
+	    }
+
+	    offset ++;
+	}
+
+	offset = 0;
+	len1 -= FIFO_EC_TAPS;
+
+	cd->ring_buf.ec_offset += len1;
+
+	while (len1) {
+
+	    if (pbx_capability == AST_FORMAT_ULAW) {
+	      sample = capi_ulaw_to_signed[*ptr1];
+	    } else {
+	      sample = capi_alaw_to_signed[*ptr1];
+	    }
+
+	    sample *= FIFO_EC_DP;
+
+	    /*
+	     * the following loop makes up
+	     * a classic FIR filter:
+	     */
+	    for (x = 0; x < FIFO_EC_TAPS; x++) {
+	      sample -= (data[x+offset] * cd->echo_cancel_coeff[x]);
+	    }
+
+	    sample /= FIFO_EC_DP;
+
+	    if (pbx_capability == AST_FORMAT_ULAW) {
+	      *ptr1 = capi_signed_to_ulaw(sample);
+	    } else {
+	      *ptr1 = capi_signed_to_alaw(sample);
+	    }
+
+	    len1--;
+	    ptr1++;
+	    offset++;
+	}
+    }
+
+    return;
+}
 
 /*===========================================================================*
  * various CAPI helper functions
@@ -5314,6 +5393,12 @@ capi_handle_data_b3_indication(_cmsg *CMSG, struct call_desc **pp_cd)
 		capi_detect_silence(cd, b3buf, b3len);
 	}
 
+	/* software echo cancelling */
+
+	if (cd->options.echo_cancel_in_software) {
+		soft_echo_cancel(cd, b3buf, b3len);
+	}
+
 	/* software echo suppression */
 
 	if (cd->options.echo_suppress_in_software) {
@@ -6491,12 +6576,14 @@ chan_capi_cmd_echosquelch(struct call_desc *cd, struct call_desc *cd_unknown,
 {
 	cc_mutex_assert(&cd->p_app->lock, MA_OWNED);
 
-	if (strcmp(param, "fax") == 0) {
+	if (strcasecmp(param, "fax") == 0) {
 		cd->options.echo_suppress_fax = 1;
 		cd->options.echo_suppress_in_software = 1;
 	} else if (ast_true(param)) {
+		cd->options.echo_suppress_fax = 0;
 		cd->options.echo_suppress_in_software = 1;
 	} else if (ast_false(param)) {
+		cd->options.echo_suppress_fax = 0;
 		cd->options.echo_suppress_in_software = 0;
 	} else {
 		cd_log(cd, LOG_WARNING, "Parameter, '%s', for "
@@ -7499,11 +7586,10 @@ capi_parse_iface_config(struct ast_variable *v, const char *name)
 	    CONF_GET_TRUE(v, cep->options.dtmf_detect_relax, "relaxdtmf", 1);
 
 	    if (!strcasecmp(v->name, "isdnmode")) {
-
 	        if (!strcasecmp(v->value, "msn")) {
-
 		    cep->options.send_complete_force = 1;
 		}
+		continue;
 	    }
 
 	    if (!strcasecmp(v->name, "holdtype")) {
@@ -7524,14 +7610,28 @@ capi_parse_iface_config(struct ast_variable *v, const char *name)
 	    }
 
 	    CONF_GET_TRUE(v, cep->options.immediate, "immediate", 1);
-	    CONF_GET_TRUE(v, cep->options.echo_suppress_in_software, "echosquelch", 1);
 	    CONF_GET_TRUE(v, cep->options.bridge, "bridge", 1);
 	    CONF_GET_TRUE(v, cep->options.ntmode, "ntmode", 1);
 
-	    if((!strcasecmp(v->name, "echosquelch")) &&
-	       (!strcmp(v->value, "fax"))) {
-	        cep->options.echo_suppress_fax = 1;
-		cep->options.echo_suppress_in_software = 1;
+	    if((!strcasecmp(v->name, "echosquelch")) ||
+	       (!strcasecmp(v->name, "echo_squelch")) ||
+	       (!strcasecmp(v->name, "echosuppress")) ||
+	       (!strcasecmp(v->name, "echo_suppress"))) {
+
+	        if (strcasecmp(v->value, "fax") == 0) {
+		    cep->options.echo_suppress_fax = 1;
+		    cep->options.echo_suppress_in_software = 1;
+		} else if (ast_true(v->value)) {
+		    cep->options.echo_suppress_fax = 0;
+		    cep->options.echo_suppress_in_software = 1;
+		} else if (ast_false(v->value)) {
+		    cep->options.echo_suppress_fax = 0;
+		    cep->options.echo_suppress_in_software = 0;
+		} else {
+		    cc_log(LOG_ERROR, "Unknown echosquelch or "
+			   "echo_suppress parameter '%s' (ignored)\n",
+			   v->value);
+		}
 		continue;
 	    }
 
@@ -7562,7 +7662,9 @@ capi_parse_iface_config(struct ast_variable *v, const char *name)
 		continue;
 	    }
 
-	    if (!strcasecmp(v->name, "echocancel")) {
+	    if ((!strcasecmp(v->name, "echocancel")) ||
+		(!strcasecmp(v->name, "echo_cancel"))) {
+
 	        if (ast_true(v->value)) {
 		    cep->options.echo_cancel_in_hardware = 1;
 		    cep->options.echo_cancel_option = EC_OPTION_DISABLE_G165;
@@ -7588,7 +7690,8 @@ capi_parse_iface_config(struct ast_variable *v, const char *name)
 		    cep->options.echo_cancel_in_software = 1;
 		}
 		else {
-		    cc_log(LOG_ERROR, "Unknown echocancel parameter \"%s\" (ignored)\n", v->value);
+		    cc_log(LOG_ERROR, "Unknown echocancel parameter "
+			   "'%s' (ignored)\n", v->value);
 		}
 		continue;
 	    }
@@ -7612,6 +7715,9 @@ capi_parse_iface_config(struct ast_variable *v, const char *name)
 		continue;
 	    }
 
+	    cc_log(LOG_ERROR, "Unknown parameter "
+		   "'%s' = '%s' (ignored)\n", v->name, 
+		   v->value ? v->value : "");
 	}
 
 	/* some parameters have implications */
