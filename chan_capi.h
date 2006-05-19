@@ -45,22 +45,14 @@
 #define FIFO_BLOCK_START ((CAPI_MAX_B3_BLOCKS+1)/2) /* blocks */
 #define FIFO_BLOCK_SIZE  (CAPI_MAX_B3_BLOCK_SIZE) /* bytes */
 #define FIFO_BF_SIZE     (CAPI_MAX_B3_BLOCKS * FIFO_BLOCK_SIZE) /* bytes */
-#define FIFO_EC_SIZE     (4 * CAPI_MAX_B3_BLOCKS * FIFO_BLOCK_SIZE) /* bytes */
-#define FIFO_EC_TAPS     128
-#define FIFO_EC_DP       (1<<12) /* coefficient decimal point */
 
 struct ring_buffer {
-    u_int8_t  data[FIFO_EC_SIZE];
+    u_int8_t  data[FIFO_BF_SIZE];
 
     u_int16_t bf_read_pos;
     u_int16_t bf_write_pos;
     u_int16_t bf_free_len;
     u_int16_t bf_used_len;
-
-    u_int16_t ec_read_pos;
-    u_int16_t ec_offset;
-    u_int16_t ec_free_len;
-    u_int16_t ec_used_len;
 
     u_int16_t end_pos;
     u_int8_t  last_byte;
@@ -443,7 +435,7 @@ struct config_entry_iface {
 	u_int8_t dummy_zero_end[1];
 };
 
-/* software echo cancellation */
+/* software echo suppression */
 
 #define EC_WINDOW_LEN      (1<<8) /* bytes, 32 millisecond (one window) */
 #define EC_WINDOW_COUNT       32  /* units */
@@ -494,9 +486,6 @@ struct call_desc {
 
 	/*! CAPI echo canceller ring buffer */
 	struct ring_buffer ring_buf;
-
-	/*! CAPI echo canceller coefficients */
-	int16_t echo_cancel_coeff[FIFO_EC_TAPS];
 
 	/*! PBX capability */
 	int32_t pbx_capability;
@@ -568,13 +557,20 @@ struct call_desc {
 
 	/*! CAPI receive buffer */
 	u_int8_t  rx_buffer_data[(CAPI_MAX_B3_BLOCK_SIZE + 
-				  AST_FRIENDLY_OFFSET)*CAPI_MAX_B3_BLOCKS];
+				  AST_FRIENDLY_OFFSET) * CAPI_MAX_B3_BLOCKS];
+
+#define RX_BUFFER_BY_HANDLE(cd, handle) \
+  ((cd)->rx_buffer_data + AST_FRIENDLY_OFFSET + \
+   ((CAPI_MAX_B3_BLOCK_SIZE + AST_FRIENDLY_OFFSET) * (handle)))
+
+	u_int16_t rx_buffer_len[CAPI_MAX_B3_BLOCKS];
+
 	u_int16_t rx_buffer_handle;
 	u_int16_t rx_noise_count;
 
 	/*! CAPI software echo suppression */
-	struct soft_echo_suppress soft_ec_rx;
-	struct soft_echo_suppress soft_ec_tx;
+	struct soft_echo_suppress soft_es_rx;
+	struct soft_echo_suppress soft_es_tx;
 
 	/*! CAPI hangup cause received */
 	u_int16_t wCause_in;

@@ -166,7 +166,6 @@ buf_init(struct ring_buffer *buffer)
     buffer->last_byte = 0xFF; /* ISDN default */
 
     buffer->bf_free_len = FIFO_BF_SIZE;
-    buffer->ec_free_len = FIFO_EC_SIZE;
     return;
 }
 
@@ -175,40 +174,12 @@ buf_write_block(struct ring_buffer *buffer,
 		const u_int8_t *data, u_int16_t len_data)
 {
     u_int16_t len_max = buffer->end_pos - buffer->bf_write_pos;
-    u_int16_t temp;
 
     if (len_data > buffer->bf_free_len) {
 
         /* data overflow */
 
         len_data = buffer->bf_free_len;
-    }
-
-    /* update echo canceller counters */
-
-    if (len_data > buffer->ec_free_len) {
-
-	temp = len_data - buffer->ec_free_len;
-
-	if(temp > buffer->ec_offset) {
-	    buffer->ec_offset = 0;
-	} else {
-	    buffer->ec_offset -= temp;
-	}
-
-	buffer->ec_read_pos += temp;
-
-	if(buffer->ec_read_pos >= buffer->end_pos) {
-	   buffer->ec_read_pos -= buffer->end_pos;
-	}
-
-	buffer->ec_used_len += buffer->ec_free_len;
-	buffer->ec_free_len = 0;
-
-    } else {
-
-	buffer->ec_free_len -= len_data;
-	buffer->ec_used_len += len_data;
     }
 
     /* update free data length */
@@ -598,90 +569,6 @@ soft_echo_suppress_process(struct call_desc *cd, struct soft_echo_suppress *rx,
 
         ptr++;
     }
-    return;
-}
-
-/*===========================================================================*
- * software echo cancelling
- *===========================================================================*/
-static void
-soft_echo_cancel(struct call_desc *cd, u_int8_t *ptr1, u_int16_t len1)
-{
-    int32_t pbx_capability = cd->pbx_capability;
-    u_int16_t offset;
-    u_int16_t x;
-      int32_t sample;
-    int16_t   data[FIFO_EC_SIZE];
-
-    len1 += FIFO_EC_TAPS;
-
-    if (len1 > FIFO_EC_SIZE) {
-        /* should not happen */
-        cc_log(LOG_NOTICE, "len1 (%d) > FIFO_EC_SIZE (%d)\n",
-	       len1, FIFO_EC_SIZE);
-	return;
-    }
-
-    offset = (cd->ring_buf.ec_used_len -
-	      cd->ring_buf.ec_offset - len1);
-
-    if (offset < cd->ring_buf.end_pos) {
-
-        offset = (cd->ring_buf.ec_offset + 
-		  cd->ring_buf.ec_read_pos);
-
-	for(x = 0; x < len1; x++) {
-
-	    if (offset >= cd->ring_buf.end_pos) {
-	        offset -= cd->ring_buf.end_pos;
-	    }
-
-	    if (pbx_capability == AST_FORMAT_ULAW) {
-	      data[x] = capi_ulaw_to_signed[cd->ring_buf.data[offset]];
-	    } else {
-	      data[x] = capi_alaw_to_signed[cd->ring_buf.data[offset]];
-	    }
-
-	    offset ++;
-	}
-
-	offset = 0;
-	len1 -= FIFO_EC_TAPS;
-
-	cd->ring_buf.ec_offset += len1;
-
-	while (len1) {
-
-	    if (pbx_capability == AST_FORMAT_ULAW) {
-	      sample = capi_ulaw_to_signed[*ptr1];
-	    } else {
-	      sample = capi_alaw_to_signed[*ptr1];
-	    }
-
-	    sample *= FIFO_EC_DP;
-
-	    /*
-	     * the following loop makes up
-	     * a classic FIR filter:
-	     */
-	    for (x = 0; x < FIFO_EC_TAPS; x++) {
-	      sample -= (data[x+offset] * cd->echo_cancel_coeff[x]);
-	    }
-
-	    sample /= FIFO_EC_DP;
-
-	    if (pbx_capability == AST_FORMAT_ULAW) {
-	      *ptr1 = capi_signed_to_ulaw(sample);
-	    } else {
-	      *ptr1 = capi_signed_to_alaw(sample);
-	    }
-
-	    len1--;
-	    ptr1++;
-	    offset++;
-	}
-    }
-
     return;
 }
 
@@ -4471,8 +4358,8 @@ __chan_capi_write(struct call_desc *cd, struct ast_frame *frame)
 
 	if (cd->options.echo_suppress_in_software) {
 	    soft_echo_suppress_process(cd, 
-				       &cd->soft_ec_tx, 
-				       &cd->soft_ec_rx, ptr, frame->datalen);
+				       &cd->soft_es_tx, 
+				       &cd->soft_es_rx, ptr, frame->datalen);
 	}
 
 	/* write data to ring buffer */
@@ -5349,24 +5236,27 @@ capi_handle_data_b3_indication(_cmsg *CMSG, struct call_desc **pp_cd)
 {
 	struct call_desc *cd = *pp_cd;
 	_cmsg CMSG2;
-	u_int8_t *b3buf = NULL;
-	int b3len = 0;
-
-	b3len = DATA_B3_IND_DATALENGTH(CMSG);
-	b3buf = &(cd->rx_buffer_data[AST_FRIENDLY_OFFSET +
-				     ((CAPI_MAX_B3_BLOCK_SIZE + AST_FRIENDLY_OFFSET) * cd->rx_buffer_handle)]);
-
-	/* extra length length (should not trigger) */
-
-	if (b3len > CAPI_MAX_B3_BLOCK_SIZE) {
-	    b3len = CAPI_MAX_B3_BLOCK_SIZE;
-	}
-
-	bcopy(DATA_B3_IND_DATA(CMSG), b3buf, b3len);
+	u_int8_t *ptr_curr;
+	u_int16_t len_curr;
 
 	cd->rx_buffer_handle++;
-	cd->rx_buffer_handle %= CAPI_MAX_B3_BLOCKS;
-	
+	if (cd->rx_buffer_handle >= CAPI_MAX_B3_BLOCKS) {
+	    cd->rx_buffer_handle = 0;
+	}
+
+	len_curr = DATA_B3_IND_DATALENGTH(CMSG);
+	ptr_curr = RX_BUFFER_BY_HANDLE(cd, cd->rx_buffer_handle);
+
+	/* extra length checks, should not trigger */
+
+	if (len_curr > CAPI_MAX_B3_BLOCK_SIZE) {
+	    len_curr = CAPI_MAX_B3_BLOCK_SIZE;
+	}
+
+	cd->rx_buffer_len[cd->rx_buffer_handle] =  len_curr;
+
+	bcopy(DATA_B3_IND_DATA(CMSG), ptr_curr, len_curr);
+
 	/* send a DATA_B3_RESP very quickly to free the buffer in capi */
 	DATA_B3_RESP_HEADER(&CMSG2, cd->p_app->application_id, 
 			    HEADER_MSGNUM(CMSG), cd->msg_ncci);
@@ -5377,9 +5267,9 @@ capi_handle_data_b3_indication(_cmsg *CMSG, struct call_desc **pp_cd)
 
 		/* write data to FAX file */
 
-		cd_verbose(cd, 6, 1, 3, "len=%d, FAX\n", b3len);
+		cd_verbose(cd, 6, 1, 3, "len=%d, FAX\n", len_curr);
 
-		if (fwrite(b3buf, 1, b3len, cd->fax_file) != b3len) {
+		if (fwrite(ptr_curr, 1, len_curr, cd->fax_file) != len_curr) {
 
 		    cd_log(cd, LOG_WARNING, "error writing output "
 			   "file (%s)\n", strerror(errno));
@@ -5390,30 +5280,24 @@ capi_handle_data_b3_indication(_cmsg *CMSG, struct call_desc **pp_cd)
 	/* wait silence detection */
 
 	if (cd->options.wait_silence_samples) {
-		capi_detect_silence(cd, b3buf, b3len);
-	}
-
-	/* software echo cancelling */
-
-	if (cd->options.echo_cancel_in_software) {
-		soft_echo_cancel(cd, b3buf, b3len);
+		capi_detect_silence(cd, ptr_curr, len_curr);
 	}
 
 	/* software echo suppression */
 
 	if (cd->options.echo_suppress_in_software) {
 		soft_echo_suppress_process(cd,
-					   &cd->soft_ec_rx, 
-					   &cd->soft_ec_tx, 
-					   b3buf, b3len);
+					   &cd->soft_es_rx, 
+					   &cd->soft_es_tx, 
+					   ptr_curr, len_curr);
 	}
 
 	/* convert sound last */
 
-	capi_copy_sound(b3buf, b3buf, b3len, 
+	capi_copy_sound(ptr_curr, ptr_curr, len_curr, 
 			cd->cep ? cd->cep->rx_convert : NULL);
 
-	cd_send_pbx_voice(cd, b3buf, b3len);
+	cd_send_pbx_voice(cd, ptr_curr, len_curr);
 	return;
 }
 
@@ -6576,7 +6460,9 @@ chan_capi_cmd_echosquelch(struct call_desc *cd, struct call_desc *cd_unknown,
 {
 	cc_mutex_assert(&cd->p_app->lock, MA_OWNED);
 
-	if (strcasecmp(param, "fax") == 0) {
+	if (strcasecmp(param, "soft") == 0) {
+		cd->options.echo_cancel_in_software = 1;
+	} else if (strcasecmp(param, "fax") == 0) {
 		cd->options.echo_suppress_fax = 1;
 		cd->options.echo_suppress_in_software = 1;
 	} else if (ast_true(param)) {
@@ -7402,7 +7288,7 @@ chan_capi_fill_controller_info(struct cc_capi_application *p_app,
 	    ctrl_temp.support.dtmf = 1;
 	}
 		
-	if (profile.globaloptions[1] & 0x01) {
+	if (profile.globaloptions[1] & 0x02) {
 	    ctrl_temp.support.echo_cancel = 1;
 	}
 
