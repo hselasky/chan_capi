@@ -1155,16 +1155,16 @@ cep_init_convert_tables(struct config_entry_iface *cep)
 		}
 
 		if (capability == AST_FORMAT_ULAW) {
-		    cep->rx_convert[n] = reversebits[capi_signed_to_ulaw(x)];
+		    cep->rx_convert[n] = capi_reverse_bits[capi_signed_to_ulaw(x)];
 		} else {
-		    cep->rx_convert[n] = reversebits[capi_signed_to_alaw(x)];
+		    cep->rx_convert[n] = capi_reverse_bits[capi_signed_to_alaw(x)];
 		}
 	}
 
     } else {
 
         for (n = 0; n < 256; n++) {
-	        cep->rx_convert[n] = reversebits[n];
+	        cep->rx_convert[n] = capi_reverse_bits[n];
 	}
     }
 
@@ -1173,9 +1173,9 @@ cep_init_convert_tables(struct config_entry_iface *cep)
         for (n = 0; n < 256; n++) {
 
 	        if (capability == AST_FORMAT_ULAW) {
-		    x = (capi_ulaw_to_signed[reversebits[n]] * tx_gain) / dp;
+		    x = (capi_ulaw_to_signed[capi_reverse_bits[n]] * tx_gain) / dp;
 		} else {
-		    x = (capi_alaw_to_signed[reversebits[n]] * tx_gain) / dp;
+		    x = (capi_alaw_to_signed[capi_reverse_bits[n]] * tx_gain) / dp;
 		}
 
 		if (capability == AST_FORMAT_ULAW) {
@@ -1188,7 +1188,7 @@ cep_init_convert_tables(struct config_entry_iface *cep)
     } else {
 
         for (n = 0; n < 256; n++) {
-		cep->tx_convert[n] = reversebits[n];
+		cep->tx_convert[n] = capi_reverse_bits[n];
 	}
     }
     return;
