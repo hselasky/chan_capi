@@ -3754,6 +3754,9 @@ chan_capi_request(const char *type, const struct ast_codec_pref *formats,
 static int
 __chan_capi_call(struct call_desc *cd, const char *idest, int timeout)
 {
+	static u_int8_t bc_bprot_alaw[] = { 0x05, 0x04, 0x03, 0x80, 0x90, 0xA3 };
+	static u_int8_t bc_bprot_ulaw[] = { 0x05, 0x04, 0x03, 0x80, 0x90, 0xA2 };
+
 	_cmsg CMSG;
 	const char *dest;
 	const char *interface;
@@ -3948,6 +3951,11 @@ __chan_capi_call(struct call_desc *cd, const char *idest, int timeout)
 	    CONNECT_REQ_FLAG0(&CMSG) = 0x01;
 	}
 #endif
+	if (cd->pbx_capability == AST_FORMAT_ULAW)
+	  CONNECT_REQ_BC(&CMSG) = bc_bprot_ulaw;
+	else if (cd->pbx_capability == AST_FORMAT_ALAW)
+	  CONNECT_REQ_BC(&CMSG) = bc_bprot_alaw;
+
 	if (__capi_put_cmsg(cd->p_app, &CMSG)) {
 
 	    /* cleanup by ast_hangup() */
