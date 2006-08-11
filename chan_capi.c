@@ -3130,12 +3130,11 @@ capi_send_connect_b3_req(struct call_desc *cd)
 }
 
 static u_int16_t
-capi_send_info_digits(struct call_desc *cd, const char *digits, int len)
+capi_send_info_digits(struct call_desc *cd, const char *digits, 
+		      u_int16_t len)
 {
     _cmsg CMSG;
     char buf[32];
-
-    cd_verbose(cd, 3, 1, 4, "digits = '%s'\n", digits);
 
     if (len > (sizeof(buf)-2)) {
         len = (sizeof(buf)-2);
@@ -3144,6 +3143,9 @@ capi_send_info_digits(struct call_desc *cd, const char *digits, int len)
     buf[0] = len + 1;
     buf[1] = 0x80;
     while(len--) {
+        cd_verbose(cd, 3, 0, 4, "digit[%d] = '%c'\n", 
+		   len, digits[len]);
+
         buf[len + 2] = digits[len];
     }
 
@@ -3151,6 +3153,38 @@ capi_send_info_digits(struct call_desc *cd, const char *digits, int len)
 		    get_msg_num_other(cd->p_app), cd->msg_plci);
     INFO_REQ_CALLEDPARTYNUMBER(&CMSG) = (_cstruct)buf;
 
+    return __capi_put_cmsg(cd->p_app, &CMSG);
+}
+
+static u_int16_t
+capi_send_inband_digits(struct call_desc *cd, const char *digits, 
+			u_int16_t len)
+{
+    _cmsg CMSG;
+    char buf[32];
+
+    if (len > (sizeof(buf)-8)) {
+        len = (sizeof(buf)-8);
+    }
+
+    buf[0] = len + 7;
+    capi_put_2(buf, 0, 3 /* send DTMF digit */);
+    capi_put_2(buf, 2, CAPI_DTMF_DURATION);
+    capi_put_2(buf, 4, CAPI_DTMF_DURATION);
+    capi_put_1(buf, 6, len); /* struct size */
+
+    while (len--) {
+        cd_verbose(cd, 3, 0, 4, "digits[%d] = '%c'\n", 
+		   len, digits[len]);
+
+	capi_put_1(buf, 7 + len, digits[len]);
+    }
+
+    FACILITY_REQ_HEADER(&CMSG, cd->p_app->application_id, 
+			get_msg_num_other(cd->p_app), cd->msg_plci);
+    FACILITY_REQ_FACILITYSELECTOR(&CMSG) = FACILITYSELECTOR_DTMF;
+    FACILITY_REQ_FACILITYREQUESTPARAMETER(&CMSG) = (_cstruct)buf;
+        
     return __capi_put_cmsg(cd->p_app, &CMSG);
 }
 
@@ -4385,13 +4419,12 @@ static int
 __chan_capi_send_digit(struct call_desc *cd, const char digit)
 {
 	u_int8_t buf[16];
-    
+
+	buf[0] = digit;
+	buf[1] = 0;
+
 	if (cd->state == CAPI_STATE_CONNECTPENDING) {
 
-		bzero(buf, sizeof(buf));
-
-		buf[0] = digit;
-		buf[1] = 0;
 		strlcat(cd->dst_telno, buf, sizeof(cd->dst_telno));
 
 		if (capi_send_info_digits(cd, &digit, 1)) {
@@ -4405,6 +4438,11 @@ __chan_capi_send_digit(struct call_desc *cd, const char digit)
 	 * Else one ends up with duplicate DTMF
 	 * tones.
 	 */
+	if(cd->options.dtmf_generate) {
+		if (capi_send_inband_digits(cd, &digit, 1)) {
+		    return -1;
+		}
+	}
 	return 0;
 }
 
@@ -7506,6 +7544,7 @@ capi_parse_iface_config(struct ast_variable *v, const char *name)
 	    CONF_GET_TRUE(v, cep->options.immediate, "immediate", 1);
 	    CONF_GET_TRUE(v, cep->options.bridge, "bridge", 1);
 	    CONF_GET_TRUE(v, cep->options.ntmode, "ntmode", 1);
+	    CONF_GET_TRUE(v, cep->options.dtmf_generate, "dtmf_generate", 1);
 
 	    if((!strcasecmp(v->name, "echosquelch")) ||
 	       (!strcasecmp(v->name, "echo_squelch")) ||
