@@ -59,6 +59,7 @@
 #include <errno.h>
 #include <unistd.h>
 #include <fcntl.h>
+#include <time.h>
 #include <sys/types.h>
 #include <asterisk/dsp.h>
 #include "xlaw.h"
@@ -3029,7 +3030,10 @@ capi_send_connect_resp(struct call_desc *cd, u_int16_t wReject,
     _cmsg CMSG;
     char buf[CAPI_MAX_STRING];
     const char *p_dst_telno;
+    struct tm tm;
+    char tm_buf[7];
     int len = 0;
+    time_t t;
 
     if ((cd->state != CAPI_STATE_ALERTING) &&
 	(cd->state != CAPI_STATE_DID) &&
@@ -3082,6 +3086,26 @@ capi_send_connect_resp(struct call_desc *cd, u_int16_t wReject,
 	if (cd->b3_config[0]) {
 
 	    CONNECT_RESP_B3CONFIGURATION(&CMSG) = (_cstruct)&cd->b3_config[0];
+	}
+
+	if (cd->options.ntmode) {
+
+	    /* provide the time to 
+	     * connected equipment:
+	     */
+	    t = time(NULL);
+
+	    if (localtime_r(&t, &tm)) {
+	        tm_buf[0] = 6;
+		capi_put_1(tm_buf, 0, tm.tm_year % 100);
+		capi_put_1(tm_buf, 1, tm.tm_mon + 1);
+		capi_put_1(tm_buf, 2, tm.tm_mday);
+		capi_put_1(tm_buf, 3, tm.tm_hour);
+		capi_put_1(tm_buf, 4, tm.tm_min);
+		capi_put_1(tm_buf, 5, tm.tm_sec);
+
+		CONNECT_RESP_DATE_TIME(&CMSG) = (_cstruct)tm_buf;
+	    }
 	}
 
 	cd->state = CAPI_STATE_ANSWERING;
@@ -5391,6 +5415,7 @@ static void
 capi_handle_connect_active_indication(_cmsg *CMSG, struct call_desc **pp_cd)
 {
 	struct call_desc *cd = *pp_cd;
+	uint8_t *date_time;
 	_cmsg CMSG2;
 	
 	CONNECT_ACTIVE_RESP_HEADER(&CMSG2, cd->p_app->application_id, 
@@ -5403,6 +5428,16 @@ capi_handle_connect_active_indication(_cmsg *CMSG, struct call_desc **pp_cd)
 	}
 
 	cd->state = CAPI_STATE_CONNECTED;
+
+	date_time = CONNECT_ACTIVE_IND_DATE_TIME(CMSG);
+
+	if (date_time && (date_time[0] > 0)) {
+	    cd_verbose(cd, 2, 0, 3, "Received Date/Time = Y%02d/M%02d/D%02d "
+		       "H%02d/M%02d/S%02d\n", 
+		       capi_get_1(date_time,0), capi_get_1(date_time,1),
+		       capi_get_1(date_time,2), capi_get_1(date_time,3),
+		       capi_get_1(date_time,4), capi_get_1(date_time,5));
+	}
 
 	/* normal processing */
 			    
