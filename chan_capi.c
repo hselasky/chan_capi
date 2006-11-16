@@ -4519,6 +4519,11 @@ chan_capi_fixup(struct ast_channel *oldchan, struct ast_channel *newchan)
 {
     struct call_desc *cd = CC_CHANNEL_PVT(newchan);
 
+    if (cd == NULL) {
+	/* should not happen */
+	return -1;
+    }
+
     cd_lock(cd);
 
     cd_verbose(cd, 3, 1, 2, "old channel = %s\n",
