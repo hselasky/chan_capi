@@ -2372,13 +2372,20 @@ cd_alloc(struct cc_capi_application *p_app, u_int16_t plci)
 
     fmt = ast_best_codec(fmt);
 
-    pbx_chan->readformat          = fmt;
-    pbx_chan->writeformat         = fmt;
+#ifdef CC_AST_HAVE_SET_READ_FORMAT
+    ast_set_read_format(pbx_chan, fmt);
+#endif
+#ifdef CC_AST_HAVE_SET_WRITE_FORMAT
+    ast_set_write_format(pbx_chan, fmt);
+#endif
+
+    pbx_chan->readformat          = fmt; /* XXX cleanup */
+    pbx_chan->writeformat         = fmt; /* XXX cleanup */
 
 #ifdef CC_AST_HAVE_TECH_PVT
     pbx_chan->tech                = &chan_capi_tech;
-    pbx_chan->rawreadformat       = fmt;
-    pbx_chan->rawwriteformat      = fmt;
+    pbx_chan->rawreadformat       = fmt; /* XXX cleanup */
+    pbx_chan->rawwriteformat      = fmt; /* XXX cleanup */
 #else
     if (pbx_chan->pvt) {
         chan_capi_fill_pvt(pbx_chan);
@@ -2386,8 +2393,8 @@ cd_alloc(struct cc_capi_application *p_app, u_int16_t plci)
         cc_log(LOG_ERROR, "PVT structure not allocated!\n");
 	goto error;
     }
-    pbx_chan->pvt->rawreadformat  = fmt;
-    pbx_chan->pvt->rawwriteformat = fmt;
+    pbx_chan->pvt->rawreadformat  = fmt; /* XXX cleanup */
+    pbx_chan->pvt->rawwriteformat = fmt; /* XXX cleanup */
 #endif
 
     /* initialize call descriptor */
@@ -4222,14 +4229,22 @@ __chan_capi_bridge(struct call_desc *cd0,
 			break;
 		}
 
-		if (cd_pbx_write((who == pbx_chan0) ? cd1 : cd0,
-				 (who == pbx_chan0) ? cd1 : cd0, f) < 0)
-		{
+		/* NOTE: Sometimes AST_FRAME_NULL can be
+		 * received here, and we don't want to
+		 * forward such frames, hence they cause
+		 * powerof(0) errors in "ast_translate_write()"
+		 */
+
+		if (f->frametype == AST_FRAME_VOICE) {
+		    if (cd_pbx_write((who == pbx_chan0) ? cd1 : cd0,
+				     (who == pbx_chan0) ? cd1 : cd0, f) < 0)
+		    {
 			ast_frfree(f);
 			*fo = NULL;
 			*rc = who;
 			ret = AST_BRIDGE_COMPLETE;
 			break;
+		    }
 		}
 
 		ast_frfree(f);

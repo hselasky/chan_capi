@@ -106,6 +106,22 @@ else
 	echo " * no 'transfercapability'"
 fi
 
+if grep -q "ast_set_read_format(" $INCLUDEDIR/channel.h; then
+	echo "#define CC_AST_HAVE_SET_READ_FORMAT" >>$CONFIGFILE
+	echo " * found 'ast_set_read_format'"
+else
+	echo "#undef CC_AST_HAVE_SET_READ_FORMAT" >>$CONFIGFILE
+	echo " * no 'ast_set_read_format'"
+fi
+
+if grep -q "ast_set_write_format(" $INCLUDEDIR/channel.h; then
+	echo "#define CC_AST_HAVE_SET_WRITE_FORMAT" >>$CONFIGFILE
+	echo " * found 'ast_set_write_format'"
+else
+	echo "#undef CC_AST_HAVE_SET_WRITE_FORMAT" >>$CONFIGFILE
+	echo " * no 'ast_set_write_format'"
+fi
+
 if grep -q "ast_config_load" $INCLUDEDIR/config.h; then
 	echo " * found 'ast_config_load'"
 else
