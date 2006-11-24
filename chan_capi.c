@@ -1266,7 +1266,7 @@ cep_unload()
       cep->b_channels_curr -= cep->b_channels_max;
       cep->b_channels_max = 0;
 
-      cep->d_channels_curr -= cep->b_channels_max;
+      cep->d_channels_curr -= cep->d_channels_max;
       cep->d_channels_max = 0;
 
       cep = cep->next;
@@ -1915,6 +1915,9 @@ cd_by_pbx_chan(struct ast_channel *pbx_chan)
     struct call_desc *cd = CC_CHANNEL_PVT(pbx_chan);
 
     cc_mutex_assert(&cd->p_app->lock, MA_OWNED);
+
+    XXX chan_capi_fixup() should use:
+    XXX struct call_desc *cd = CC_CHANNEL_PVT(newchan);
 
 #else
     struct call_desc *cd = NULL;
@@ -4532,21 +4535,17 @@ chan_capi_call(struct ast_channel *pbx_chan, char *idest, int timeout)
 static int
 chan_capi_fixup(struct ast_channel *oldchan, struct ast_channel *newchan)
 {
-    struct call_desc *cd = CC_CHANNEL_PVT(newchan);
+    struct call_desc *cd = cd_by_pbx_chan(oldchan);
 
     if (cd == NULL) {
 	/* should not happen */
 	return -1;
     }
 
-    cd_lock(cd);
-
     cd_verbose(cd, 3, 1, 2, "old channel = %s\n",
 	       oldchan->name);
 
-    if (cd->pbx_chan == oldchan) {
-        cd->pbx_chan = newchan;
-    }
+    cd->pbx_chan = newchan;
 
     cd_unlock(cd);
 
