@@ -181,10 +181,9 @@ struct ring_buffer {
 
 #define CAPI_STATE_CONNECTED            6
 
-#define CAPI_STATE_DISCONNECTING        7
-#define CAPI_STATE_DISCONNECTED         8
+#define CAPI_STATE_DISCONNECTED         7
 
-#define CAPI_STATE_ONHOLD               9
+#define CAPI_STATE_ONHOLD               8
 
 #define CAPI_MAX_STRING              2048
 

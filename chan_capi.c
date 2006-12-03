@@ -5441,11 +5441,6 @@ capi_handle_connect_active_indication(_cmsg *CMSG, struct call_desc **pp_cd)
 				   HEADER_MSGNUM(CMSG), cd->msg_plci);
 	__capi_put_cmsg(cd->p_app, &CMSG2);
 	
-	if (cd->state == CAPI_STATE_DISCONNECTING) {
-		cd_verbose(cd, 3, 1, 3, "disconnecting\n");
-		return;
-	}
-
 	cd->state = CAPI_STATE_CONNECTED;
 
 	date_time = CONNECT_ACTIVE_IND_DATE_TIME(CMSG);
@@ -5494,12 +5489,6 @@ capi_handle_connect_b3_active_indication(_cmsg *CMSG, struct call_desc **pp_cd)
 	CONNECT_B3_ACTIVE_RESP_HEADER(&CMSG2, cd->p_app->application_id, 
 				      HEADER_MSGNUM(CMSG), cd->msg_ncci);
 	__capi_put_cmsg(cd->p_app, &CMSG2);
-
-	if (cd->state == CAPI_STATE_DISCONNECTING) {
-	    cd_verbose(cd, 3, 1, 3, "during B3 disconnect for "
-		       "NCCI 0x%04x\n", cd->msg_ncci);
-	    return;
-	}
 
 	cd->flags.b3_active = 1;
 	cd->flags.b3_pending = 0;
@@ -5576,13 +5565,6 @@ capi_handle_disconnect_b3_indication(_cmsg *CMSG, struct call_desc **pp_cd)
 		buffer[capi_get_1(ncpi,8)] = 0;
 		pbx_builtin_setvar_helper(cd->pbx_chan, "FAXID", buffer);
 	    }
-	}
-
-	if (cd->state == CAPI_STATE_DISCONNECTING) {
-		/* active disconnect */
-		DISCONNECT_REQ_HEADER(&CMSG2, cd->p_app->application_id, 
-				      get_msg_num_other(cd->p_app), cd->msg_plci);
-		__capi_put_cmsg(cd->p_app, &CMSG2);
 	}
 
 	if (cd->flags.fax_set_prot_on_b3_disc) {
