@@ -2839,6 +2839,8 @@ cd_set_fax_config(struct call_desc *cd, u_int16_t fax_format,
 
 	cc_mutex_assert(&cd->p_app->lock, MA_OWNED);
 
+	bzero(&b3_conf, sizeof(b3_conf));
+
 	CAPI_INIT(CAPI_B3_CONFIG_FAX_G3, &b3_conf);
 
 	b3_conf.wResolution = 0;
@@ -3128,6 +3130,18 @@ capi_send_connect_resp(struct call_desc *cd, u_int16_t wReject,
 	CONNECT_RESP_ADDITIONALINFO(&CMSG) = CAPI_DEFAULT;
     }
     return __capi_put_cmsg(cd->p_app, &CMSG);
+}
+
+static u_int16_t
+capi_send_connect_resp_app(struct cc_capi_application *p_app, 
+			   uint16_t wMsgNum, uint16_t plci, 
+			   uint16_t wReject)
+{
+    _cmsg CMSG;
+    CONNECT_RESP_HEADER(&CMSG, p_app->application_id, 
+			wMsgNum, plci);
+    CONNECT_RESP_REJECT(&CMSG) = wReject;
+    return __capi_put_cmsg(p_app, &CMSG);
 }
 
 static u_int16_t
@@ -5117,7 +5131,7 @@ capi_handle_info_indication(_cmsg *CMSG, struct call_desc **pp_cd)
 		    cd_send_pbx_frame(cd, AST_CONTROL_HOLD, 0, NULL, 0);
 		    break;
 
-		case 0xfa: /* retrive indicator */
+		case 0xfa: /* retrieve indicator */
 		    cd_send_pbx_frame(cd, AST_CONTROL_UNHOLD, 0, NULL, 0);
 		    break;
 #endif
@@ -5248,7 +5262,7 @@ capi_handle_facility_indication(_cmsg *CMSG, struct call_desc **pp_cd)
 			if (cd->flags.send_retrieve_req_on_hold_ind) {
 			    cd->flags.send_retrieve_req_on_hold_ind = 0;
 
-			    capi_send_fac_suppl_req(cd, 0x0003 /* retrive */);
+			    capi_send_fac_suppl_req(cd, 0x0003 /* retrieve */);
 			}
 		    }
 		}
@@ -6164,6 +6178,11 @@ capi_handle_cmsg(struct cc_capi_application *p_app, _cmsg *CMSG)
 
 	    cd = cd_alloc(p_app, PLCI);
 
+	    if (cd == NULL) {
+	        /* requested circuit channel not available */
+	        capi_send_connect_resp_app(p_app, wMsgNum, PLCI, 0x0004);
+	    }
+
 	} else if (wCmd == CAPI_P_CONF(CONNECT)) {
 
 	    if (cd) {
@@ -6435,6 +6454,8 @@ chan_capi_cmd_call_deflect(struct call_desc *cd, struct call_desc *cd_unknown,
 	FACILITY_REQ_FACILITYSELECTOR(&CMSG) = FACILITYSELECTOR_SUPPLEMENTARY;
 	FACILITY_REQ_FACILITYREQUESTPARAMETER(&CMSG) = (_cstruct)&fac;
 
+	cd->support.CD = 0; /* only send once per call */
+
 	return __capi_put_cmsg(cd->p_app, &CMSG);
 }
 
@@ -6581,6 +6602,8 @@ chan_capi_cmd_malicious(struct call_desc *cd, struct call_desc *cd_unknown,
 		return -1;
 	}
 
+	cd->support.MCID = 0; /* only send once per call */
+
 	cd_verbose(cd, 2, 1, 4, "sending MCID\n");
 
 	return capi_send_fac_suppl_req(cd, 0x000E /* MCID */);
@@ -6600,7 +6623,7 @@ chan_capi_cmd_hold(struct call_desc *cd, struct call_desc *cd_unknown,
 	/* TODO: support holdtype notify */
 
 	if (cd->flags.send_retrieve_req_on_hold_ind) {
-		cd_log(cd, LOG_NOTICE, "Retrive already buffered. "
+		cd_log(cd, LOG_NOTICE, "Retrieve already buffered. "
 		       "Please try to hold again.\n");
 		return -1;
 	}
@@ -6658,7 +6681,7 @@ chan_capi_cmd_holdtype(struct call_desc *cd, struct call_desc *cd_unknown,
 }
 
 /*---------------------------------------------------------------------------*
- *      chan_capi_cmd_retrieve - retrive a call on hold
+ *      chan_capi_cmd_retrieve - retrieve a call on hold
  *
  * param: not used
  *---------------------------------------------------------------------------*/
@@ -6669,7 +6692,7 @@ chan_capi_cmd_retrieve(struct call_desc *cd, struct call_desc *cd_unknown,
 	cc_mutex_assert(&cd->p_app->lock, MA_OWNED);
 
 	if (cd->flags.send_retrieve_req_on_hold_ind) {
-		cd_log(cd, LOG_NOTICE, "Retrive already buffered. "
+		cd_log(cd, LOG_NOTICE, "Retrieve already buffered. "
 		       "Please try to hold again.\n");
 		return 0;
 	}
@@ -6916,7 +6939,7 @@ chan_capi_command_exec(struct ast_channel *chan, void *data)
  * the complete number first, before starting the PBX. That
  * is the job of this thread. Else one should just have 
  * forwarded the digits to the PBX, and a flag saying if
- * it is sending is complete or not.
+ * it is sending complete or not.
  */
 static void *
 do_periodic(void *data)
