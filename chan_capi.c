@@ -183,6 +183,10 @@ buf_write_block(struct ring_buffer *buffer,
         len_data = buffer->bf_free_len;
     }
 
+    if (len_data > 0) {
+        buffer->last_byte = data[len_data-1];
+    }
+
     /* update free data length */
 
     buffer->bf_free_len -= len_data;
