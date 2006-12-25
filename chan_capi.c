@@ -6160,6 +6160,10 @@ capi_handle_cmsg(struct cc_capi_application *p_app, _cmsg *CMSG)
 
 		wInfo = FACILITY_CONF_INFO(CMSG);
 		capi_handle_facility_confirmation_app(CMSG, p_app);
+
+	    } else if (wCmd == CAPI_P_CONF(CONNECT)) {
+
+	        goto handle_connect_conf;
 	    }
 
 	    /* nothing more to do */
@@ -6194,6 +6198,8 @@ capi_handle_cmsg(struct cc_capi_application *p_app, _cmsg *CMSG)
 		       "received! (ignored)\n");
 		goto done;
 	    }
+
+	handle_connect_conf:
 
 	    cd = cd_by_msg_num(p_app, wMsgNum);
 	}
