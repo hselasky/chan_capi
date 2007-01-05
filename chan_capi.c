@@ -60,6 +60,7 @@
 #include <unistd.h>
 #include <fcntl.h>
 #include <time.h>
+#include <signal.h>
 #include <sys/types.h>
 #include <asterisk/dsp.h>
 #include "xlaw.h"
@@ -7138,6 +7139,58 @@ chan_capi_reload(int fd, int argc, char *argv[])
     return RESULT_SUCCESS;
 }
 
+/* return information about a specific CAPI channel to the PBX */
+
+static int
+chan_capi_get_channel_info(int fd, int argc, char *argv[]) 
+{
+    struct call_desc *cd;
+    struct cc_capi_application *p_app = capi_application[0];
+    uint16_t plci;
+
+    if ((argc != 4) || (argv[3] == NULL)) {
+        return RESULT_SHOWUSAGE;
+    }
+
+    if (p_app == NULL) {
+	ast_cli(fd, "No CAPI application!\n");
+	return 0;
+    }
+
+    plci = strtoul(argv[3], NULL, 0) & 0xFFFF;
+
+    if ((plci & 0xFF00) == 0x0000) {
+	ast_cli(fd, "Invalid ID is addressing a controller and not a call!\n");
+	return 0;
+    }
+
+    cc_mutex_lock(&(p_app->lock));
+
+    cd = cd_by_plci(p_app, plci);
+
+    if (cd) {
+	ast_cli(fd, 
+		"CAPI ID 0x%04x = {\n"
+		"  direction = %s\n"
+		"  source_nr = %s\n"
+		"  dest_nr   = %s\n"
+		"  state     = %d\n"
+		"  on_hold   = %s\n"
+		"}\n",
+		cd->msg_plci,
+		cd->flags.dir_outgoing ? "outgoing" : "incoming",
+		cd->src_telno,
+		cd->dst_telno,
+		cd->state,
+		cd->flags.hold_is_active ? "true" : "false");
+    } else {
+	ast_cli(fd, "No such active call ID!\n");
+    }
+    cc_mutex_unlock(&(p_app->lock));
+
+    return 0;
+}
+
 /* return information about "chan_capi" to the PBX */
 
 static int
@@ -7173,7 +7226,8 @@ chan_capi_get_info(int fd, int argc, char *argv[])
 		    "    in use count            : 0x%08x call descriptors\n"
 		    "    record allocation rate  :     0x%04x calls/second\n"
 		    "    limit allocation rate   :     0x%04x calls/second\n"
-		    "}\n",
+		    " Currently active calls:\n"
+		    "    channel name, source->destination, call ID, in/out\n",
 		    n,
 		    p_app->application_id,
 		    p_app->application_uptime,
@@ -7208,11 +7262,17 @@ chan_capi_get_info(int fd, int argc, char *argv[])
 			    use_count_on_hold[x] ++;
 			}
 		    }
+
+		    ast_cli(fd, "    %s: %s->%s, 0x%04x, %s\n",
+			    cd->pbx_chan ? cd->pbx_chan->name : "<no PBX channel>",
+			    cd->src_telno, cd->dst_telno,
+			    cd->msg_plci, cd->flags.dir_outgoing ? "out" : "in");
 		}
 		cd = cd->next;
 	    }
+            cc_mutex_unlock(&p_app->lock);
 
-	    cc_mutex_unlock(&p_app->lock);
+	    ast_cli(fd, "}\n");
 	}
     }
 
@@ -7300,6 +7360,12 @@ static struct ast_cli_entry  cli_info =
 	  "Show CAPI info",
 	  "Usage: capi info\n"
 	  "       Show info about B channels.\n" };
+
+static struct ast_cli_entry  cli_show_channel =
+	{ { "capi", "show", "channel", NULL }, chan_capi_get_channel_info, 
+	  "Show information about an active CAPI channel",
+	  "Usage: capi show channel <id>\n"
+	  "       Show info about a channel given by ID.\n" };
 
 static struct ast_cli_entry  cli_show_channels =
 	{ { "capi", "show", "channels", NULL }, chan_capi_get_info, 
@@ -8063,6 +8129,14 @@ int load_module(void)
 	    cc_log(LOG_ERROR, "Unable to register cli_debug\n");
 	    goto done;
 	}
+	chan_capi_load_level = 11;
+
+	error = ast_cli_register(&cli_show_channel);
+
+	if (error) {
+	    cc_log(LOG_ERROR, "Unable to register cli_show_channel\n");
+	    goto done;
+	}
 	chan_capi_load_level = 12;
 
 	error = ast_cli_register(&cli_no_debug);
@@ -8144,9 +8218,11 @@ int unload_module()
 	case 20:
 	    ast_unregister_application(CHAN_CAPI_APP);
 	case 16:
-	    ast_cli_unregister(&cli_debug);
-	case 12:
 	    ast_cli_unregister(&cli_no_debug);
+	case 12:
+	    ast_cli_unregister(&cli_show_channel);
+	case 11:
+	    ast_cli_unregister(&cli_debug);
 	case 10:
 	    ast_cli_unregister(&cli_show_channels);
 	case 9:
