@@ -285,6 +285,9 @@ struct cc_capi_flags {
 	/* set if the PBX has been started */
 	u_int32_t pbx_started : 1;
 
+	/* set if the PBX has been set to state UP */
+	u_int32_t pbx_state_up : 1;
+
 	/* set if the "CONNECTEDNUMBER" variable was set */
 	u_int32_t connected_number_set : 1;
 

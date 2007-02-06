@@ -5484,12 +5484,13 @@ capi_handle_connect_active_indication(_cmsg *CMSG, struct call_desc **pp_cd)
 			/* RESP already sent ... wait for CONNECT_B3_IND */
 		}
 	} else {
-		/* special treatment for early B3 connects */
-		if (cd->pbx_chan->_state != AST_STATE_UP) {
+		if (cd->flags.pbx_state_up == 0) {
+		    cd->flags.pbx_state_up = 1;
+			/* special treatment for early B3 connects */
 			ast_setstate(cd->pbx_chan, AST_STATE_UP);
+			cd_send_pbx_frame(cd, AST_FRAME_CONTROL, 
+					  AST_CONTROL_ANSWER, NULL, 0);
 		}
-		cd_send_pbx_frame(cd, AST_FRAME_CONTROL, 
-				  AST_CONTROL_ANSWER, NULL, 0);
 	}
 	return;
 }
@@ -5533,7 +5534,9 @@ capi_handle_connect_b3_active_indication(_cmsg *CMSG, struct call_desc **pp_cd)
 		capi_send_detect_dtmf_req(cd, 1);
 	}
 
-	if (cd->state == CAPI_STATE_CONNECTED) {
+	if ((cd->state == CAPI_STATE_CONNECTED) &&
+	    (cd->flags.pbx_state_up == 0)) {
+		cd->flags.pbx_state_up = 1;
 		ast_setstate(cd->pbx_chan, AST_STATE_UP);
 		cd_send_pbx_frame(cd, AST_FRAME_CONTROL, 
 				  AST_CONTROL_ANSWER, NULL, 0);
