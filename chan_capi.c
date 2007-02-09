@@ -5831,7 +5831,7 @@ cd_start_pbx(struct call_desc **pp_cd, const char *exten)
 	cc_mutex_assert(&cd->p_app->lock, MA_OWNED);
 
 	if (cd->flags.pbx_search_complete) {
-	    cd_verbose(cd, 3, 1, 2,  "PBX already started!\n");
+	    cd_verbose(cd, 3, 0, 2,  "PBX already started!\n");
 	    return;
 	}
 
@@ -5852,7 +5852,7 @@ cd_start_pbx(struct call_desc **pp_cd, const char *exten)
 	 */
 	capi_send_alert_req(cd, 1);
 
-	cd_verbose(cd, 2, 1, 2, "Started PBX\n");
+	cd_verbose(cd, 2, 0, 2, "Started PBX\n");
 
 	return;
 
@@ -5860,10 +5860,8 @@ cd_start_pbx(struct call_desc **pp_cd, const char *exten)
 
 	/* ignore call */
 
-	if (capi_global.debug) {
-	    cc_log(LOG_WARNING, "Unable to start PBX for "
+	cd_verbose(cd, 2, 0, 2, "Unable to start PBX for "
 		   "destination '%s'!\n", cd->dst_telno);
-	}
 
 	cd->wCause_out = 0x0001; /* ignore call */
 
@@ -5961,7 +5959,7 @@ capi_handle_connect_indication(_cmsg *CMSG, struct call_desc **pp_cd)
 	pbx_builtin_setvar_helper(pbx_chan, "ANI2", &buffer[0]);
 #endif
 
-	cd_verbose(cd, 1, 1, 3, "Incoming call from '%s' to '%s', "
+	cd_verbose(cd, 1, 0, 3, "Incoming call from '%s' to '%s', "
 		   "CIP=0x%04x, sending_complete=%s\n",
 		   cd->src_telno, cd->dst_telno, cd->msg_cip,
 		   cd->flags.sending_complete_received ? "yes" : "no");

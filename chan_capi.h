@@ -61,12 +61,12 @@ struct ring_buffer {
 /*
  * helper for ast_verbose with different verbose settings
  */
-#define cc_verbose(o_v, c_d, ...)				\
+#define cc_verbose(o_v, c_d, fmt, ...)				\
   do {								\
       if ((o_v == 0) || (option_verbose > o_v)) {		\
 	  if ((!c_d) || ((c_d) && (capi_global.debug))) {	\
 	      ast_mutex_lock(&capi_verbose_lock);		\
-	      ast_verbose(__VA_ARGS__);				\
+	      ast_verbose(fmt,## __VA_ARGS__);			\
 	      ast_mutex_unlock(&capi_verbose_lock);		\
 	  }							\
       }								\
