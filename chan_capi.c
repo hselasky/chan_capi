@@ -4381,6 +4381,10 @@ __chan_capi_read(struct call_desc *cd)
 
 	if ((cd->pbx_rd.frametype == AST_FRAME_DTMF) && 
 	    (cd->pbx_rd.subclass == 'f')) {
+#if 0
+	    XXX This code is disabled because calling "ast_async_goto()"
+	    XXX causes locking order reversal.
+	    XXX TODO: Execute this code out of order
 
 	    if (strcmp(pbx_chan->exten, "fax")) {
 	      if (ast_exists_extension(pbx_chan, ast_strlen_zero(pbx_chan->macrocontext) ? 
@@ -4401,6 +4405,7 @@ __chan_capi_read(struct call_desc *cd)
 	    } else {
 	      cc_log(LOG_DEBUG, "Already in a fax extension, not redirecting\n");
 	    }
+#endif
 	}
 	p_frame = &cd->pbx_rd;
 
