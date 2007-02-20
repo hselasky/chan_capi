@@ -105,13 +105,17 @@ LOCAL_USER_DECL;
  *
  * 1. cc_mutex_lock(&do_periodic_lock);
  *
- * 2. cc_mutex_lock(&cd->pbx_chan->lock); **
+ * 2. cc_mutex_lock(&modlock); (See Asterisk source code)
  *
- * 3. cc_mutex_lock(&p_app->lock); ***
+ * 3. cc_mutex_lock(&chlock); (See Asterisk source code)
  *
- * 4. cc_mutex_lock(&capi_global_lock);
+ * 4. cc_mutex_lock(&cd->pbx_chan->lock); **
  *
- * 5. cc_mutex_lock(&capi_verbose_lock);
+ * 5. cc_mutex_lock(&p_app->lock); ***
+ *
+ * 6. cc_mutex_lock(&capi_global_lock);
+ *
+ * 7. cc_mutex_lock(&capi_verbose_lock);
  *
  *
  *  ** the PBX will call the callback functions with 
@@ -152,6 +156,8 @@ static const char * const empty_string = "\0\0";
 static const u_int8_t sending_complete_struct[] = { 2, 1, 0 };
 
 static const u_int8_t sending_not_complete_struct[] = { 2, 0, 0 };
+
+static uint8_t update_use_count = 0;
 
 /* external prototypes */
 extern const char *capi_info_string(u_int16_t wInfo);
@@ -1116,6 +1122,10 @@ chan_capi_post_init(struct cc_capi_application *p_app);
         (((cd)->msg_num == 0x0000) &&		\
          ((cd)->msg_plci == 0x0000) &&		\
          ((cd)->state == 0x00))
+
+#define CD_NO_HANGUP(cd) \
+        (((cd)->hangup_chan == NULL) &&	\
+         ((cd)->free_chan == NULL))
 
 /* initialize sound conversion tables */
 
@@ -2219,7 +2229,9 @@ cd_free(struct call_desc *cd, u_int8_t hangup_what)
 
     /* tell PBX to update use count */
 
-    ast_update_use_count();
+    cc_mutex_lock(&capi_global_lock);
+    update_use_count = 1;
+    cc_mutex_unlock(&capi_global_lock);
 
     /* NOTE: one cannot call into Asterisk
      * while holding "p_app->lock", hence this
@@ -2239,7 +2251,6 @@ cd_free(struct call_desc *cd, u_int8_t hangup_what)
     if (pbx_chan)
     {
         if (dir_outgoing) {
-
 	    cc_mutex_assert(&pbx_chan->lock, MA_OWNED);
 
 	    ast_setstate(pbx_chan, AST_STATE_DOWN);
@@ -2250,12 +2261,11 @@ cd_free(struct call_desc *cd, u_int8_t hangup_what)
 	}
 
 	if (hard_hangup) {
-
-	    ast_hangup(pbx_chan);
+	    cd->hangup_chan = pbx_chan;
 	}
 
 	if (hangup_what & 2) {
-	    ast_channel_free(pbx_chan);
+	    cd->free_chan = pbx_chan;
 	}
 
 	/* else just wait for "ast_read()" to 
@@ -2306,7 +2316,7 @@ cd_alloc(struct cc_capi_application *p_app, u_int16_t plci)
 
     while (cd) {
 
-        if (CD_IS_UNUSED(cd)) {
+        if (CD_IS_UNUSED(cd) && CD_NO_HANGUP(cd)) {
             break;
         }
         cd = cd->next;
@@ -2336,8 +2346,11 @@ cd_alloc(struct cc_capi_application *p_app, u_int16_t plci)
         p_app->cd_alloc_stats++;
     }
 
-    ast_update_use_count();
+    /* tell PBX to update use count */
 
+    cc_mutex_lock(&capi_global_lock);
+    update_use_count = 1;
+    cc_mutex_unlock(&capi_global_lock);
 
     /* try to allocate a pair of pipes */
 
@@ -6957,6 +6970,7 @@ static void *
 do_periodic(void *data)
 {
 	struct cc_capi_application *p_app;
+	struct ast_channel *pbx_chan;
 	struct call_desc *cd;
 	u_int32_t temp;
 	u_int16_t x;
@@ -7002,6 +7016,32 @@ do_periodic(void *data)
 			    }
 			}
 
+			/* the following is here just to avoid deadlocks: */
+
+			if (cd->hangup_chan) {
+			    pbx_chan = cd->hangup_chan;
+			    cd->hangup_chan = NULL;
+			    cc_mutex_unlock(&p_app->lock);
+			    cc_verbose(3, 0, VERBOSE_PREFIX_4 "Out of order hangup, "
+				       "pbx_chan=%p\n", pbx_chan);
+			    ast_hangup(pbx_chan);
+			    cc_mutex_lock(&p_app->lock);	
+			    goto repeat;
+			}
+
+			/* the following is here just to avoid deadlocks: */
+
+			if (cd->free_chan) {
+			    pbx_chan = cd->free_chan;
+			    cd->free_chan = NULL;
+			    cc_mutex_unlock(&p_app->lock);
+			    cc_verbose(3, 0, VERBOSE_PREFIX_4 "Out of order channel free, "
+				       "pbx_chan=%p\n", pbx_chan);
+			    ast_channel_free(pbx_chan);
+			    cc_mutex_lock(&p_app->lock);
+			    goto repeat;
+			}
+
 			/* XXX are there more things that must be 
 			 * checked regularly ?
 			 */
@@ -7028,6 +7068,17 @@ do_periodic(void *data)
 		    p_app->cd_alloc_rate_warned = 0;
 
 		    cc_mutex_unlock(&p_app->lock);
+
+		    cc_mutex_lock(&capi_global_lock);
+		    temp  = update_use_count;
+		    update_use_count = 0;
+		    cc_mutex_unlock(&capi_global_lock);
+
+		    if (temp) {
+		        cc_verbose(3, 0, VERBOSE_PREFIX_4 "Out of order "
+				 "update usecount!\n");
+			ast_update_use_count();
+		    }
 		}
 	    }
 

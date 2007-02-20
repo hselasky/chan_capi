@@ -492,6 +492,9 @@ struct call_desc {
 	/*! CAPI echo canceller ring buffer */
 	struct ring_buffer ring_buf;
 
+	struct ast_channel *hangup_chan;
+	struct ast_channel *free_chan;
+
 	/*! PBX capability */
 	int32_t pbx_capability;
 
