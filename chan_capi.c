@@ -1,5 +1,5 @@
 /*-
- * Copyright (c) 2006 Hans Petter Selasky. All rights reserved.
+ * Copyright (c) 2006-2007 Hans Petter Selasky. All rights reserved.
  * Copyright (C) 2005 Cytronics & Melware, Armin Schindler
  * Copyright (C) 2002-2005 Junghanns.NET GmbH, Klaus-Peter Junghanns
  * 
@@ -2615,7 +2615,7 @@ cd_detect_dtmf(struct call_desc *cd, int subclass, const void *__data, int len)
 	if (len < sizeof(temp_fr)) {
 
 	    cd_log(cd, LOG_ERROR, "wrote %d bytes instead "
-		   "of %d bytes!\n", len, sizeof(temp_fr));
+		   "of %d bytes!\n", len, (uint32_t)sizeof(temp_fr));
 
 	}
     }
@@ -2675,7 +2675,7 @@ cd_send_pbx_voice(struct call_desc *cd, const void *data_ptr, u_int32_t data_len
 	if (len < sizeof(temp_fr)) {
 
 	    cd_log(cd, LOG_ERROR, "wrote %d bytes instead "
-		   "of %d bytes!\n", len, sizeof(temp_fr));
+		   "of %d bytes!\n", len, (uint32_t)sizeof(temp_fr));
 	    return -1;
 	}
     }
@@ -2730,7 +2730,7 @@ cd_send_pbx_frame(struct call_desc *cd, int frametype, int subclass,
     if (len != sizeof(temp_fr)) {
 
         cd_log(cd, LOG_ERROR, "wrote %d bytes instead "
-	       "of %d bytes!\n", len, sizeof(temp_fr));
+	       "of %d bytes!\n", len, (uint32_t)sizeof(temp_fr));
 	return -1;
     }
     return 0;
@@ -4346,7 +4346,9 @@ static struct ast_frame *
 __chan_capi_read(struct call_desc *cd)
 {
 	struct ast_frame * p_frame = NULL;
+#if 0
 	struct ast_channel * pbx_chan = cd->pbx_chan;
+#endif
 	int len;
 
 	if (cd->state == CAPI_STATE_ONHOLD) {
@@ -6461,7 +6463,7 @@ chan_capi_cmd_call_deflect(struct call_desc *cd, struct call_desc *cd_unknown,
 	if (param_len > (sizeof(fac)-0x0B)) {
 	    cd_log(cd, LOG_WARNING, "truncating long deflection "
 		   "number from %d to %d bytes!\n",
-		   param_len, sizeof(fac)-0x0B);
+		   param_len, (uint32_t)(sizeof(fac)-0x0B));
 	    param_len = sizeof(fac)-0x0B;
 	}
 
