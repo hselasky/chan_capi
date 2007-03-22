@@ -92,6 +92,8 @@ static const char * const config_file = "capi.conf";
 #if (CC_AST_VERSION < 400)
 STANDARD_LOCAL_USER;
 LOCAL_USER_DECL;
+#else
+static int unload_module();
 #endif
 
 /*
@@ -2527,11 +2529,16 @@ cd_set_cep(struct call_desc *cd, struct config_entry_iface *cep)
 	  strlcpy(pbx_chan->context, cep->context, 
 		  sizeof(pbx_chan->context));
 
+#if (CC_AST_VERSION >= 400)
+	  ast_string_field_set(pbx_chan, accountcode, cep->accountcode);
+	  ast_string_field_set(pbx_chan, language, cep->language);
+#else
 	  strlcpy(pbx_chan->accountcode, cep->accountcode, 
 		  sizeof(pbx_chan->accountcode));
 
 	  strlcpy(pbx_chan->language, cep->language, 
 		  sizeof(pbx_chan->language));
+#endif
     }
 
     /* configure DSP, if present */
@@ -3829,8 +3836,13 @@ chan_capi_request(const char *type, const struct ast_codec_pref *formats,
 
 	    /* set default channel name */
 
+#if (CC_AST_VERSION >= 400)
+	    ast_string_field_build(pbx_chan, name,
+				   "CAPI/%s/%s", cep->name, dest);
+#else
 	    snprintf(pbx_chan->name, sizeof(pbx_chan->name),
 		     "CAPI/%s/%s", cep->name, dest);
+#endif
 	}
 
  done:
@@ -5804,8 +5816,13 @@ cd_copy_telno_ext(struct call_desc *cd, const char *exten)
 
         strlcpy(pbx_chan->exten, exten, sizeof(pbx_chan->exten));
 
+#if (CC_AST_VERSION >= 400)
+	ast_string_field_build(pbx_chan, name, "CAPI/%s/%s-%x",
+			       cep->name, cd->dst_telno, capi_get_counter());
+#else
 	snprintf(pbx_chan->name, sizeof(pbx_chan->name), "CAPI/%s/%s-%x",
 		 cep->name, cd->dst_telno, capi_get_counter());
+#endif
 
 	strlcpy(src_telno, cd->src_telno, sizeof(src_telno));
 
@@ -8377,9 +8394,9 @@ reload_module(void)
 }
 
 AST_MODULE_INFO(ASTERISK_GPL_KEY, AST_MODLFLAG_DEFAULT, CHAN_CAPI_DESC,
-		.load = load_module,
-		.unload = unload_module,
-		.reload = reload_module,);
+		&load_module,
+		&unload_module,
+		&reload_module);
 #else
 int usecount()
 {
