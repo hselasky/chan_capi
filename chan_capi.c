@@ -94,6 +94,7 @@ STANDARD_LOCAL_USER;
 LOCAL_USER_DECL;
 #else
 static int unload_module();
+#undef CC_AST_CUSTOM_FUNCTION
 #endif
 
 /*
@@ -4616,7 +4617,12 @@ chan_capi_fixup(struct ast_channel *oldchan, struct ast_channel *newchan)
  *      chan_capi_indicate - called from "ast_indicate()"
  *---------------------------------------------------------------------------*/
 static int
+#if (CC_AST_VERSION >= 400)
+chan_capi_indicate(struct ast_channel *pbx_chan, int condition, 
+		   const void *data, size_t datalen)
+#else
 chan_capi_indicate(struct ast_channel *pbx_chan, int condition)
+#endif
 {
     struct call_desc *cd = cd_by_pbx_chan(pbx_chan);
     int error = 0;
