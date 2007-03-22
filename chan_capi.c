@@ -8417,9 +8417,9 @@ reload_module(void)
 }
 
 AST_MODULE_INFO(ASTERISK_GPL_KEY, AST_MODFLAG_DEFAULT, CHAN_CAPI_DESC,
-		&load_module,
-		&unload_module,
-		&reload_module);
+		.load = &load_module,
+		.unload = &unload_module,
+		.reload = &reload_module);
 #else
 int usecount()
 {
