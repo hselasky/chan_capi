@@ -2370,7 +2370,11 @@ cd_alloc(struct cc_capi_application *p_app, u_int16_t plci)
 
     /* try to allocate a PBX channel */
 
+#if (CC_AST_VERSION >= 400)
+    pbx_chan = ast_channel_alloc(0, 0, 0, 0, "");
+#else
     pbx_chan = ast_channel_alloc(0);
+#endif
 
     if (pbx_chan == NULL) {
         cc_log(LOG_ERROR, "Unable to allocate a PBX channel!\n");
@@ -3879,8 +3883,8 @@ __chan_capi_call(struct call_desc *cd, const char *idest, int timeout)
 	const char *interface;
 	const char *param;
 	const char *ocid;
-	char *ton;
-	char *p;
+	const char *ton;
+	const char *p;
 	struct ast_channel *pbx_chan = cd->pbx_chan;
 	char dstring[AST_MAX_EXTENSION];
 	char called[AST_MAX_EXTENSION];
@@ -4826,6 +4830,18 @@ chan_capi_send_digit(struct ast_channel *pbx_chan, const char digit)
  done:
     return error;
 }
+
+#if (CC_AST_VERSION >= 400)
+/*---------------------------------------------------------------------------*
+ *      chan_capi_send_digit_end - called from "ast_write()" and "ast_senddigit()"
+ *---------------------------------------------------------------------------*/
+static int
+chan_capi_send_digit_end(struct ast_channel *pbx_chan, const char digit,
+			 unsigned int duration)
+{
+    return chan_capi_send_digit(pbx_chan, digit);
+}
+#endif
 
 #ifndef CC_AST_NO_DEVICESTATE
 /*---------------------------------------------------------------------------*
@@ -7503,7 +7519,7 @@ const struct ast_channel_tech chan_capi_tech = {
 	.requester          = chan_capi_request,
 #if (CC_AST_VERSION >= 400)
 	.send_digit_begin   = chan_capi_send_digit_begin,
-	.send_digit_end     = chan_capi_send_digit,
+	.send_digit_end     = chan_capi_send_digit_end,
 #else
 	.send_digit         = chan_capi_send_digit,
 #endif
