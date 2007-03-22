@@ -30,6 +30,10 @@
  */
 #include "config.h"
 
+#if (CC_AST_VERSION >= 400)
+#include <asterisk.h>
+#endif
+
 #include <asterisk/lock.h>
 #include <asterisk/frame.h> 
 #include <asterisk/channel.h>
@@ -70,13 +74,10 @@
 #include "chan_capi20.h"
 #include "chan_capi.h"
 
-/* #define CC_VERSION "cm-x.y.z" */
-#define CC_VERSION "$Revision: 1.164.2.15 $"
-
 /*
  * local variables
  */
-#define CHAN_CAPI_DESC "Common ISDN API 2.0 Driver (" CC_VERSION ") " ASTERISKVERSION
+#define CHAN_CAPI_DESC "Common ISDN API 2.0 Driver " ASTERISKVERSION
 #define CHAN_CAPI_APP  "capiCommand"
 
 #ifdef CC_AST_HAVE_TECH_PVT
@@ -88,8 +89,10 @@ static char *chan_capi_pbx_type = "CAPI";
 
 static const char * const config_file = "capi.conf";
 
+#if (CC_AST_VERSION < 400)
 STANDARD_LOCAL_USER;
 LOCAL_USER_DECL;
+#endif
 
 /*
  * LOCKING RULES
@@ -2374,7 +2377,9 @@ cd_alloc(struct cc_capi_application *p_app, u_int16_t plci)
 
     cd->pbx_chan = pbx_chan;
 
+#if (CC_AST_VERSION < 400)
     pbx_chan->type                = chan_capi_pbx_type;
+#endif
     pbx_chan->fds[0]              = fds[0];
     CC_CHANNEL_PVT(pbx_chan)      = cd;
 
@@ -4774,6 +4779,17 @@ chan_capi_write(struct ast_channel *pbx_chan, struct ast_frame *p_frame)
     return error;
 }
 
+#if (CC_AST_VERSION >= 400)
+/*---------------------------------------------------------------------------*
+ *      chan_capi_send_digit_begin - not needed
+ *---------------------------------------------------------------------------*/
+static int
+chan_capi_send_digit_begin(struct ast_channel *pbx_chan, const char digit)
+{
+    return 0;
+}
+#endif
+
 /*---------------------------------------------------------------------------*
  *      chan_capi_send_digit - called from "ast_write()" and "ast_senddigit()"
  *---------------------------------------------------------------------------*/
@@ -6857,7 +6873,11 @@ chan_capi_commands[] = {
 static int
 chan_capi_command_exec(struct ast_channel *chan, void *data)
 {
+#if (CC_AST_VERSION >= 400)
+	struct ast_module_user *u;
+#else
 	struct localuser *u = NULL;
+#endif
 	struct ast_channel *chan_second = NULL;
 	struct call_desc *cd0;
 	struct call_desc *cd1;
@@ -6873,7 +6893,11 @@ chan_capi_command_exec(struct ast_channel *chan, void *data)
 		return -1;
 	}
 
+#if (CC_AST_VERSION >= 400)
+	u = ast_module_user_add(chan);
+#else
 	LOCAL_USER_ADD(u);
+#endif
 
 	/* duplicate string using alloca */
 
@@ -6903,9 +6927,11 @@ chan_capi_command_exec(struct ast_channel *chan, void *data)
 	}
 
 	if (capicmd->capi_only) {
-
+#if (CC_AST_VERSION >= 400)
+	    if (chan->tech != &chan_capi_tech) {
+#else
 	    if (strcmp(chan->type, "CAPI")) {
-
+#endif
 	        cc_log(LOG_WARNING, "capiCommand works on CAPI "
 		       "channels only. Check your "
 		       "'extensions.conf'!\n");
@@ -6955,7 +6981,11 @@ chan_capi_command_exec(struct ast_channel *chan, void *data)
 
  done:
 	if (u) {
+#if (CC_AST_VERSION >= 400)
+	    ast_module_user_remove(u);
+#else
 	    LOCAL_USER_REMOVE(u);
+#endif
 	}
 
 	return error;
@@ -7154,8 +7184,10 @@ chan_capi_reload(int fd, int argc, char *argv[])
     cfg = ast_config_load((char *)config_file);
 
     if (!cfg) {
-        ast_cli(fd, "Unable to "
-		"load %s!\n", config_file);
+        if (fd >= 0) {
+	    ast_cli(fd, "Unable to "
+		    "load %s!\n", config_file);
+	}
 	goto done;
     }
 
@@ -7191,8 +7223,10 @@ chan_capi_reload(int fd, int argc, char *argv[])
     }
 
     if(error) {
-        ast_cli(fd, "chan_capi reload "
-		"error=0x%04x\n", error);
+        if (fd >= 0) {
+	    ast_cli(fd, "chan_capi reload "
+		    "error=0x%04x\n", error);
+	}
     }
 
     return RESULT_SUCCESS;
@@ -7450,7 +7484,12 @@ const struct ast_channel_tech chan_capi_tech = {
 	.description        = CHAN_CAPI_DESC,
 	.capabilities       = AST_FORMAT_ALAW,
 	.requester          = chan_capi_request,
+#if (CC_AST_VERSION >= 400)
+	.send_digit_begin   = chan_capi_send_digit_begin,
+	.send_digit_end     = chan_capi_send_digit,
+#else
 	.send_digit         = chan_capi_send_digit,
+#endif
 	.send_text          = NULL,
 	.call               = chan_capi_call,
 	.hangup             = chan_capi_hangup,
@@ -8082,6 +8121,9 @@ static struct ast_custom_function vanitynumber_function = {
 /*
  * main: load the module
  */
+#if (CC_AST_VERSION >= 400)
+static
+#endif
 int load_module(void)
 {
 	struct cc_capi_application *p_app = NULL;
@@ -8257,6 +8299,9 @@ int load_module(void)
 /*
  * unload the module
  */
+#if (CC_AST_VERSION >= 400)
+static
+#endif
 int unload_module()
 {
 	u_int16_t x;
@@ -8324,6 +8369,18 @@ int unload_module()
 	return 0;
 }
 
+#if (CC_AST_VERSION >= 400)
+static int
+reload_module(void)
+{
+	return chan_capi_reload(-1,2,0);
+}
+
+AST_MODULE_INFO(ASTERISK_GPL_KEY, AST_MODLFLAG_DEFAULT, CHAN_CAPI_DESC,
+		.load = load_module,
+		.unload = unload_module,
+		.reload = reload_module,);
+#else
 int usecount()
 {
 	struct cc_capi_application *p_app;
@@ -8356,3 +8413,4 @@ char *key()
 {
 	return ASTERISK_GPL_KEY;
 }
+#endif
