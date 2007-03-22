@@ -95,6 +95,7 @@ LOCAL_USER_DECL;
 #else
 static int unload_module();
 #undef CC_AST_CUSTOM_FUNCTION
+#define AST_MODULE "chan_capi"
 #endif
 
 /*
@@ -8415,7 +8416,7 @@ reload_module(void)
 	return chan_capi_reload(-1,2,0);
 }
 
-AST_MODULE_INFO(ASTERISK_GPL_KEY, AST_MODLFLAG_DEFAULT, CHAN_CAPI_DESC,
+AST_MODULE_INFO(ASTERISK_GPL_KEY, AST_MODFLAG_DEFAULT, CHAN_CAPI_DESC,
 		&load_module,
 		&unload_module,
 		&reload_module);
