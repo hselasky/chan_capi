@@ -154,12 +154,17 @@ else
 	echo " * no 'devicestate.h'"
 fi
 
-if grep -q "ASTERISK_VERSION_NUM .*104" $INCLUDEDIR/version.h; then
-	echo "#define CC_AST_VERSION 401" >>$CONFIGFILE
+if grep -q "ASTERISK_VERSION_NUM.*0104" $INCLUDEDIR/version.h; then
+	echo "#define CC_AST_VERSION ASTERISK_VERSION_NUM" >>$CONFIGFILE
 	echo " * found Asterisk version 1.4.x"
 else
-	echo "#define CC_AST_VERSION 201" >>$CONFIGFILE
+if grep -q "ASTERISK_VERSION_NUM.*0102" $INCLUDEDIR/version.h; then
+	echo "#define CC_AST_VERSION ASTERISK_VERSION_NUM" >>$CONFIGFILE
 	echo " * found Asterisk version 1.2.x"
+else
+	echo "#define CC_AST_VERSION 010200" >>$CONFIGFILE
+	echo " * forcing Asterisk version 1.2.0"
+fi
 fi
 
 echo "" >>$CONFIGFILE
