@@ -30,8 +30,6 @@
  */
 #include "config.h"
 
-#include <asterisk/version.h>
-
 #if (CC_AST_VERSION >= 010400)
 #include <asterisk.h>
 #endif
@@ -8455,8 +8453,10 @@ char *description()
 	return "Common ISDN API 2.0, CAPI2.0, for Asterisk";
 }
 
+#ifdef ASTERISK_GPL_KEY
 char *key()
 {
 	return ASTERISK_GPL_KEY;
 }
+#endif
 #endif

@@ -81,7 +81,7 @@ clean:
 	rm -f config.h
 	rm -f *.so *.o
 
-config.h: ${ASTERISK_HEADER_DIR}/asterisk/version.h
+config.h:
 	./create_config.sh "$(ASTERISK_HEADER_DIR)"
 
 chan_capi.so: $(OBJECTS)
