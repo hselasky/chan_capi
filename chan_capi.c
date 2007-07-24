@@ -30,7 +30,7 @@
  */
 #include "config.h"
 
-#if (CC_AST_VERSION >= 010400)
+#if (CC_AST_VERSION >= 0x10400)
 #include <asterisk.h>
 #endif
 
@@ -89,7 +89,7 @@ static char *chan_capi_pbx_type = "CAPI";
 
 static const char * const config_file = "capi.conf";
 
-#if (CC_AST_VERSION < 010400)
+#if (CC_AST_VERSION < 0x10400)
 STANDARD_LOCAL_USER;
 LOCAL_USER_DECL;
 #else
@@ -2372,8 +2372,8 @@ cd_alloc(struct cc_capi_application *p_app, u_int16_t plci)
 
     /* try to allocate a PBX channel */
 
-#if (CC_AST_VERSION >= 010400)
-#if (CC_AST_VERSION >= 010403)
+#if (CC_AST_VERSION >= 0x10400)
+#if (CC_AST_VERSION >= 0x10403)
     pbx_chan = ast_channel_alloc(0, 0, 0, 0, "", "", "", 0, 0);
 #else
     pbx_chan = ast_channel_alloc(0, 0, 0, 0, "");
@@ -2389,7 +2389,7 @@ cd_alloc(struct cc_capi_application *p_app, u_int16_t plci)
 
     cd->pbx_chan = pbx_chan;
 
-#if (CC_AST_VERSION < 010400)
+#if (CC_AST_VERSION < 0x10400)
     pbx_chan->type                = chan_capi_pbx_type;
 #endif
     pbx_chan->fds[0]              = fds[0];
@@ -2539,7 +2539,7 @@ cd_set_cep(struct call_desc *cd, struct config_entry_iface *cep)
 	  strlcpy(pbx_chan->context, cep->context, 
 		  sizeof(pbx_chan->context));
 
-#if (CC_AST_VERSION >= 010400)
+#if (CC_AST_VERSION >= 0x10400)
 	  ast_string_field_set(pbx_chan, accountcode, cep->accountcode);
 	  ast_string_field_set(pbx_chan, language, cep->language);
 #else
@@ -3147,7 +3147,11 @@ capi_send_connect_resp(struct call_desc *cd, u_int16_t wReject,
 	     */
 	    t = time(NULL);
 
+#if (CC_AST_VERSION >= 0x10408)
+	    if (ast_localtime(&t, &tm, NULL)) {
+#else
 	    if (localtime_r(&t, &tm)) {
+#endif
 	        tm_buf[0] = 6;
 		capi_put_1(tm_buf, 0, tm.tm_year % 100);
 		capi_put_1(tm_buf, 1, tm.tm_mon + 1);
@@ -3846,7 +3850,7 @@ chan_capi_request(const char *type, const struct ast_codec_pref *formats,
 
 	    /* set default channel name */
 
-#if (CC_AST_VERSION >= 010400)
+#if (CC_AST_VERSION >= 0x10400)
 	    ast_string_field_build(pbx_chan, name,
 				   "CAPI/%s/%s", cep->name, dest);
 #else
@@ -4622,7 +4626,7 @@ chan_capi_fixup(struct ast_channel *oldchan, struct ast_channel *newchan)
  *      chan_capi_indicate - called from "ast_indicate()"
  *---------------------------------------------------------------------------*/
 static int
-#if (CC_AST_VERSION >= 010400)
+#if (CC_AST_VERSION >= 0x10400)
 chan_capi_indicate(struct ast_channel *pbx_chan, int condition, 
 		   const void *data, size_t datalen)
 #else
@@ -4806,7 +4810,7 @@ chan_capi_write(struct ast_channel *pbx_chan, struct ast_frame *p_frame)
     return error;
 }
 
-#if (CC_AST_VERSION >= 010400)
+#if (CC_AST_VERSION >= 0x10400)
 /*---------------------------------------------------------------------------*
  *      chan_capi_send_digit_begin - not needed
  *---------------------------------------------------------------------------*/
@@ -4842,7 +4846,7 @@ chan_capi_send_digit(struct ast_channel *pbx_chan, const char digit)
     return error;
 }
 
-#if (CC_AST_VERSION >= 010400)
+#if (CC_AST_VERSION >= 0x10400)
 /*---------------------------------------------------------------------------*
  *      chan_capi_send_digit_end - called from "ast_write()" and "ast_senddigit()"
  *---------------------------------------------------------------------------*/
@@ -5843,7 +5847,7 @@ cd_copy_telno_ext(struct call_desc *cd, const char *exten)
 
         strlcpy(pbx_chan->exten, exten, sizeof(pbx_chan->exten));
 
-#if (CC_AST_VERSION >= 010400)
+#if (CC_AST_VERSION >= 0x10400)
 	ast_string_field_build(pbx_chan, name, "CAPI/%s/%s-%x",
 			       cep->name, cd->dst_telno, capi_get_counter());
 #else
@@ -6917,7 +6921,7 @@ chan_capi_commands[] = {
 static int
 chan_capi_command_exec(struct ast_channel *chan, void *data)
 {
-#if (CC_AST_VERSION >= 010400)
+#if (CC_AST_VERSION >= 0x10400)
 	struct ast_module_user *u;
 #else
 	struct localuser *u = NULL;
@@ -6937,7 +6941,7 @@ chan_capi_command_exec(struct ast_channel *chan, void *data)
 		return -1;
 	}
 
-#if (CC_AST_VERSION >= 010400)
+#if (CC_AST_VERSION >= 0x10400)
 	u = ast_module_user_add(chan);
 #else
 	LOCAL_USER_ADD(u);
@@ -6971,7 +6975,7 @@ chan_capi_command_exec(struct ast_channel *chan, void *data)
 	}
 
 	if (capicmd->capi_only) {
-#if (CC_AST_VERSION >= 010400)
+#if (CC_AST_VERSION >= 0x10400)
 	    if (chan->tech != &chan_capi_tech) {
 #else
 	    if (strcmp(chan->type, "CAPI")) {
@@ -7025,7 +7029,7 @@ chan_capi_command_exec(struct ast_channel *chan, void *data)
 
  done:
 	if (u) {
-#if (CC_AST_VERSION >= 010400)
+#if (CC_AST_VERSION >= 0x10400)
 	    ast_module_user_remove(u);
 #else
 	    LOCAL_USER_REMOVE(u);
@@ -7528,7 +7532,7 @@ const struct ast_channel_tech chan_capi_tech = {
 	.description        = CHAN_CAPI_DESC,
 	.capabilities       = AST_FORMAT_ALAW,
 	.requester          = chan_capi_request,
-#if (CC_AST_VERSION >= 010400)
+#if (CC_AST_VERSION >= 0x10400)
 	.send_digit_begin   = chan_capi_send_digit_begin,
 	.send_digit_end     = chan_capi_send_digit_end,
 #else
@@ -8165,7 +8169,7 @@ static struct ast_custom_function vanitynumber_function = {
 /*
  * main: load the module
  */
-#if (CC_AST_VERSION >= 010400)
+#if (CC_AST_VERSION >= 0x10400)
 static
 #endif
 int load_module(void)
@@ -8343,7 +8347,7 @@ int load_module(void)
 /*
  * unload the module
  */
-#if (CC_AST_VERSION >= 010400)
+#if (CC_AST_VERSION >= 0x10400)
 static
 #endif
 int unload_module()
@@ -8413,7 +8417,7 @@ int unload_module()
 	return 0;
 }
 
-#if (CC_AST_VERSION >= 010400)
+#if (CC_AST_VERSION >= 0x10400)
 static int
 reload_module(void)
 {
