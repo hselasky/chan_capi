@@ -2440,6 +2440,7 @@ cd_alloc(struct cc_capi_application *p_app, u_int16_t plci)
     cd->msg_plci = plci;
     cd->digit_time_last = p_app->application_uptime;
     cd->white_noise_rem = 1;
+    cd->rx_time = ast_tvnow();
 
     cc_mutex_lock(&capi_global_lock);
     cd->support = plci_to_controller(plci)->support; /* copy support bits */
@@ -2691,6 +2692,16 @@ cd_send_pbx_voice(struct call_desc *cd, const void *data_ptr, u_int32_t data_len
     if (cd->tx_queue_len < CAPI_MAX_QLEN) {
 
         cd->tx_queue_len++;
+
+	/* compute correct delivery */
+
+	cd->rx_time.tv_usec += (temp_fr.samples * 125);
+	if (cd->rx_time.tv_usec >= 1000000) {
+	    cd->rx_time.tv_usec -= 1000000;
+	    cd->rx_time.tv_sec += 1;
+	}
+
+	temp_fr.delivery = cd->rx_time;
 
 	len = write(cd->fd[1], &temp_fr, sizeof(temp_fr));
 

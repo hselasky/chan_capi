@@ -1,8 +1,8 @@
 /*-
  *
  * Copyright (c) 2006 Hans Petter Selasky. All rights reserved.
- * Copyright (C) 2005 Cytronics & Melware, Armin Schindler
- * Copyright (C) 2002-2005 Junghanns.NET GmbH, Klaus-Peter Junghanns
+ * Copyright (c) 2005 Cytronics & Melware, Armin Schindler
+ * Copyright (c) 2002-2005 Junghanns.NET GmbH, Klaus-Peter Junghanns
  * 
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -491,6 +491,8 @@ struct call_desc {
 
 	/*! CAPI echo canceller ring buffer */
 	struct ring_buffer ring_buf;
+
+	struct timeval rx_time;
 
 	struct ast_channel *hangup_chan;
 	struct ast_channel *free_chan;
