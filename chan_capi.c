@@ -6045,6 +6045,11 @@ capi_handle_connect_indication(_cmsg *CMSG, struct call_desc **pp_cd)
 	pbx_builtin_setvar_helper(pbx_chan, "DISPLAY", &buffer[0]);
 #endif
 
+#ifdef CONNECT_IND_FLAG1
+	pbx_builtin_setvar_helper(pbx_chan, "NOT_E2E_DIGITAL", 
+	  (CONNECT_IND_FLAG1(CMSG) & CAPI_FLAG1_NOT_END_TO_END_DIGITAL) ?
+	  "1" : "0");
+#endif
 	capi_get_multi_1(CONNECT_IND_KEYPADFACILITY(CMSG), 0, 
 			 &buffer, sizeof(buffer));
 
