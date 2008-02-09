@@ -323,17 +323,6 @@ struct cc_capi_options {
 	/* set if software echo canceling is enabled */
 	u_int32_t echo_cancel_in_software : 1;
 
-	/* set if software echo suppression is enabled */
-	u_int32_t echo_suppress_in_software : 1;
-
-	/* set if echo suppression has detected a FAX */
-	u_int32_t echo_suppress_fax : 1;
-
-	/* echo suppression offset, 
-	 * in units of EC_WINDOW_LEN bytes:
-	 */
-	u_int16_t echo_suppress_offset;
-
 	/* set if DTMF detection should be done in software. 
 	 * Else in hardware:
 	 */
@@ -438,33 +427,6 @@ struct config_entry_iface {
 	struct config_entry_iface *next;
 
 	u_int8_t dummy_zero_end[1];
-};
-
-/* software echo suppression */
-
-#define EC_WINDOW_LEN      (1<<8) /* bytes, 32 millisecond (one window) */
-#define EC_WINDOW_COUNT       32  /* units */
-#define EC_POWER_OFFSET        8  /* windows */
-#define EC_STUCK_OFFSET       24  /* windows */
-#define EC_NOISE_PRIME  0xffff1d
-
-struct soft_echo_suppress {
-  u_int32_t power_acc; /* total accumulated power */
-  u_int16_t power_avg[EC_WINDOW_COUNT]; /* average power */
-  u_int16_t samples;   /* number of samples accumulated */
-  u_int16_t offset;    /* current power average offset */
-  u_int8_t  active : 1;
-  u_int8_t  unused : 7;
-  u_int8_t  stuck;     /* number of windows without data */
-
-  int32_t sin_2100_amp_last;
-  int32_t cos_2100_amp_last;
-
-  int32_t sin_2100_amp_curr;
-  int32_t cos_2100_amp_curr;
-
-  u_int16_t sincos_2100_count_1;
-  u_int16_t sincos_2100_count_2;
 };
 
 struct cc_capi_application;
@@ -577,10 +539,6 @@ struct call_desc {
 
 	u_int16_t rx_buffer_handle;
 	u_int16_t rx_noise_count;
-
-	/*! CAPI software echo suppression */
-	struct soft_echo_suppress soft_es_rx;
-	struct soft_echo_suppress soft_es_tx;
 
 	/*! CAPI hangup cause received */
 	u_int16_t wCause_in;

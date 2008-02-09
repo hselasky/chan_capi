@@ -257,339 +257,6 @@ buf_read_block(struct ring_buffer *buffer, void **p_ptr, u_int16_t *p_len)
     return;
 }
 
-/*===========================================================================*
- * software echo suppression
- *===========================================================================*/
-
-/* routine to compute the square root */
-
-u_int16_t 
-sqrt_32(u_int32_t a) {
-    u_int32_t b = 0x40000000;
-    u_int32_t x = 0x40000000;
-
-    while(1) {
-
-        if(a >= b) {
-
-	   a -= b;
-
-	   if(b & 1) {
-	      b >>= 1;
-	      b |= x;
-	      break;
-	   }
-	   b >>= 1;
-	   b |= x;
-	   x >>= 1;
-	   b ^= x;
-	   x >>= 1;
-	   b ^= x;
-
-	} else {
-
-	   if(b & 1) {
-	      b >>= 1;
-	      break;
-	   }
-	   b >>= 1;
-	   x >>= 1;
-	   b ^= x;
-	   x >>= 1;
-	   b ^= x;
-	}
-    }
-    return b;
-}
-
-#define EC_FACTOR_MAX 0x100
-
-static int32_t
-soft_echo_suppress_get_factor(struct call_desc *cd,
-			      struct soft_echo_suppress *rx,
-			      struct soft_echo_suppress *tx)
-{
-    u_int16_t rx_power = rx->power_avg[rx->offset];
-    u_int16_t tx_power = ((tx->stuck < EC_STUCK_OFFSET) ? 
-			  tx->power_avg[tx->offset] : 0);
-    int32_t factor;
-
-    if(cd->options.echo_suppress_fax) {
-
-        /* assure simplex sound */
-
-        if (tx_power > (rx_power/2)) {
-	    if(tx->active) {
-	      factor = 0x00;
-	    } else {
-	      rx->active = 1;
-	      factor = 0xFF;
-	    }
-	} else {
-	    factor = 0x00;
-	    rx->active = 0;
-	}
-
-    } else {
-
-        /* duplex sound */
-
-        factor  = tx_power;
-
-	/* the following factor has been 
-	 * set according to listening tests:
-	 */
-	factor *= 38; 
-
-	if ((factor > rx_power) &&
-	    (tx_power > 32)) {
-
-	    if(tx->active) {
-	        factor = 0x00;
-	    } else {
-	        rx->active = 1;
-
-		/* activate the echo suppressor
-		 *
-		 * NOTE: typical "rx_power:tx_power" 
-		 * ratio when only echo is received 
-		 * is 1:32
-		 */
-		factor /= (rx_power ? rx_power : 1);
-
-		if (factor > (EC_FACTOR_MAX-1)) {
-		    factor = (EC_FACTOR_MAX-1);
-		}
-		if (factor < 4) {
-		    factor = 0x00;
-		    rx->active = 0;
-		}
-	    }
-	} else {
-	    factor = 0x00;
-	    rx->active = 0;
-	}
-    }
-#if 0
-    cc_log(LOG_NOTICE, "%s r0x%04x t0x%04x f0x%04x a%d\n", 
-	   (rx > tx) ? "                          " : "", 
-	   rx_power, tx_power, factor, rx->active);
-#endif
-    return factor;
-}
-
-static const int16_t sin_2100_demux[80] = {
-  0x0000, 0x7f99, 0xebfb, 0x838b, 0x278d, 0x7640, 0xc5e5, 0x92de, 
-  0x4b3b, 0x6154, 0xa57f, 0xace0, 0x678d, 0x42e0, 0x8df5, 0xcf05, 
-  0x79bb, 0x1de1, 0x8195, 0xf5f6, 0x7fff, 0xf5f6, 0x8195, 0x1de1, 
-  0x79bb, 0xcf05, 0x8df5, 0x42e0, 0x678d, 0xace0, 0xa57f, 0x6154, 
-  0x4b3b, 0x92de, 0xc5e5, 0x7640, 0x278d, 0x838b, 0xebfb, 0x7f99, 
-  0x0000, 0x8067, 0x1405, 0x7c75, 0xd873, 0x89c0, 0x3a1b, 0x6d22, 
-  0xb4c5, 0x9eac, 0x5a81, 0x5320, 0x9873, 0xbd20, 0x720b, 0x30fb, 
-  0x8645, 0xe21f, 0x7e6b, 0x0a0a, 0x8001, 0x0a0a, 0x7e6b, 0xe21f, 
-  0x8645, 0x30fb, 0x720b, 0xbd20, 0x9873, 0x5320, 0x5a81, 0x9eac, 
-  0xb4c5, 0x6d22, 0x3a1b, 0x89c0, 0xd873, 0x7c75, 0x1405, 0x8067, };
-
-static const int16_t cos_2100_demux[80] = {
-  0x7fff, 0xf5f6, 0x8195, 0x1de1, 0x79bb, 0xcf05, 0x8df5, 0x42e0, 
-  0x678d, 0xace0, 0xa57f, 0x6154, 0x4b3b, 0x92de, 0xc5e5, 0x7640, 
-  0x278d, 0x838b, 0xebfb, 0x7f99, 0x0000, 0x8067, 0x1405, 0x7c75, 
-  0xd873, 0x89c0, 0x3a1b, 0x6d22, 0xb4c5, 0x9eac, 0x5a81, 0x5320, 
-  0x9873, 0xbd20, 0x720b, 0x30fb, 0x8645, 0xe21f, 0x7e6b, 0x0a0a, 
-  0x8001, 0x0a0a, 0x7e6b, 0xe21f, 0x8645, 0x30fb, 0x720b, 0xbd20, 
-  0x9873, 0x5320, 0x5a81, 0x9eac, 0xb4c5, 0x6d22, 0x3a1b, 0x89c0, 
-  0xd873, 0x7c75, 0x1405, 0x8067, 0x0000, 0x7f99, 0xebfb, 0x838b, 
-  0x278d, 0x7640, 0xc5e5, 0x92de, 0x4b3b, 0x6154, 0xa57f, 0xace0, 
-  0x678d, 0x42e0, 0x8df5, 0xcf05, 0x79bb, 0x1de1, 0x8195, 0xf5f6, };
-
-static void
-soft_echo_suppress_process(struct call_desc *cd, struct soft_echo_suppress *rx, 
-			   struct soft_echo_suppress *tx, u_int8_t *ptr, 
-			   u_int16_t len)
-{
-    int32_t pbx_capability = cd->pbx_capability;
-    int32_t sound_factor = soft_echo_suppress_get_factor(cd, rx, tx);
-    int32_t noise_factor = ((tx->stuck < EC_STUCK_OFFSET) ? 
-			    tx->power_avg[tx->offset] : 0) / 256;
-    int32_t temp;
-    int32_t white_noise;
-    u_int16_t x;
-    u_int16_t y;
-    u_int8_t silence;
-
-    /* clear the stuck variable */
-    rx->stuck = 0;
-
-    if (pbx_capability == AST_FORMAT_ULAW) {
-        silence = capi_signed_to_ulaw(0);
-    } else {
-        silence = capi_signed_to_alaw(0);
-    }
-
-    while(len--) {
-        if (pbx_capability == AST_FORMAT_ULAW) {
-	  temp = capi_ulaw_to_signed[*ptr];
-	} else {
-	  temp = capi_alaw_to_signed[*ptr];
-	}
-
-	/* sum up signal power */
-
-	rx->power_acc += (temp * temp) / EC_WINDOW_LEN;
-
-	/* demultiplex FAX tone */
-
-	rx->sin_2100_amp_curr += 
-	  (temp * ((int32_t)(sin_2100_demux[rx->sincos_2100_count_1]))) /
-	  0x40; 
-
-	rx->cos_2100_amp_curr += 
-	  (temp * ((int32_t)(cos_2100_demux[rx->sincos_2100_count_1]))) /
-	  0x40;
-
-	if (sound_factor) {
-
-	    /* simple prime white noise generator */
-
-	    white_noise = cd->white_noise_rem;
-
-	    if (white_noise & 1) {
-	        white_noise += EC_NOISE_PRIME;
-	    }
-	    white_noise /= 2;
-
-	    cd->white_noise_rem = white_noise;
-
-	    /* convert unsigned to signed */
-
-	    white_noise ^= 0x800000;
-	    if(white_noise & 0x800000) {
-	       white_noise |= (-0x800000);
-	    }
-
-	    white_noise /= 256;
-	    white_noise *= noise_factor;
-	    white_noise /= 65536;
-
-	    if(sound_factor >= 0xFF)
-	      temp = silence;
-	    else
-	      temp = (temp * ((EC_FACTOR_MAX-1) - sound_factor)) / EC_FACTOR_MAX;
-
-	    temp += (white_noise * sound_factor) / EC_FACTOR_MAX;
-
-	    if (pbx_capability == AST_FORMAT_ULAW) {
-	        *ptr = capi_signed_to_ulaw(temp);
-	    } else {
-	        *ptr = capi_signed_to_alaw(temp);
-	    }
-	}
-
-	rx->sincos_2100_count_1++;
-	if (rx->sincos_2100_count_1 >= 80) {
-
-	    int32_t dx,dy,dr;
-
-	    rx->sin_2100_amp_curr /= 0x10000;
-	    rx->cos_2100_amp_curr /= 0x10000;
-
-	    temp = ((rx->sin_2100_amp_curr*rx->sin_2100_amp_curr) +
-		    (rx->cos_2100_amp_curr*rx->cos_2100_amp_curr));
-
-	    dx = (rx->cos_2100_amp_curr -
-		  rx->cos_2100_amp_last);
-
-	    dy = (rx->sin_2100_amp_curr -
-		  rx->sin_2100_amp_last);
-
-	    dr = ((dx*dx) + (dy*dy));
-#if 0
-	    cc_log(LOG_NOTICE, "FAX amplitude: %s d=%d t=0x%08x r=0x%08x %d\n", 
-		   (rx > tx) ? "                             " : "",
-		   cd->options.echo_suppress_fax, temp, dr, temp - dr);
-#endif
-	    /*
-	     * detect 2100 +/- 16.7 Hz 
-	     * according to ITU G.168
-	     */
-	    if((dr >= 0) &&
-	       (dr < temp) && 
-	       (temp > 0x10000))
-	    {
-	        rx->sincos_2100_count_2++;
-
-	        /* disable the echo suppressor */
-
-	        if((rx->sincos_2100_count_2 >= 20) &&
-		   (cd->options.echo_suppress_fax == 0)) {
-		   cd->options.echo_suppress_fax = 1;
-
-		   cd_verbose(cd, 1, 0, 3, "FAX tone detected, "
-			      "switching echo suppressor!\n");
-		}
-	    } else {
-	        rx->sincos_2100_count_2 = 0;
-	    }
-
-	    rx->sincos_2100_count_1 = 0;
-
-	    rx->sin_2100_amp_last = 
-	      rx->sin_2100_amp_curr;
-
-	    rx->cos_2100_amp_last = 
-	      rx->cos_2100_amp_curr;
-
-	    rx->sin_2100_amp_curr = 0;
-	    rx->cos_2100_amp_curr = 0;
-	}
-
-	rx->samples++;
-	if (rx->samples >= EC_WINDOW_LEN) {
-
-	    /* increase stuck variable of the peer */
-
-	    if(tx->stuck != 0xFF) {
-	       tx->stuck++;
-	    }
-
-	    /* clear current RX power */
-
-	    rx->power_avg[rx->offset] = 0;
-
-	    /* advance power average offset */
-
-	    rx->offset++;
-	    if(rx->offset >= EC_WINDOW_COUNT) {
-	        rx->offset = 0;
-	    }
-
-	    /* square root the accumulated power */
-
-	    rx->power_acc = sqrt_32(rx->power_acc);
-
-	    /* store RX power */
-
-	    for(x = cd->options.echo_suppress_offset; x--; ) {
-
-	      y = (x + rx->offset) % EC_WINDOW_COUNT;
-
-	      if(rx->power_avg[y] < rx->power_acc) {
-		 rx->power_avg[y] = rx->power_acc;
-	      }
-	    }
-
-	    /* get next value */
-
-	    sound_factor = soft_echo_suppress_get_factor(cd, rx, tx);
-
-	    rx->power_acc = 0;
-	    rx->samples = 0;
-	}
-
-        ptr++;
-    }
-    return;
-}
 
 /*===========================================================================*
  * various CAPI helper functions
@@ -2790,7 +2457,7 @@ cd_handle_dst_telno(struct call_desc *cd, const u_int8_t *p_dst_telno)
         goto done;
     }
 
-    strlcat(cd->dst_telno, p_dst_telno, sizeof(cd->dst_telno));
+    strlcat(cd->dst_telno, (const void *)p_dst_telno, sizeof(cd->dst_telno));
 
     cd->digit_time_last = cd->p_app->application_uptime;
 
@@ -4519,14 +4186,6 @@ __chan_capi_write(struct call_desc *cd, struct ast_frame *frame)
 	capi_copy_sound(frame->data, ptr, frame->datalen,
 			cd->cep ? cd->cep->tx_convert : NULL);
 
-	/* software echo suppression */
-
-	if (cd->options.echo_suppress_in_software) {
-	    soft_echo_suppress_process(cd, 
-				       &cd->soft_es_tx, 
-				       &cd->soft_es_rx, ptr, frame->datalen);
-	}
-
 	/* write data to ring buffer */
 
 	buf_write_block(&(cd->ring_buf), ptr, frame->datalen);
@@ -4548,7 +4207,7 @@ __chan_capi_send_digit(struct call_desc *cd, const char digit)
 
 	if (cd->state == CAPI_STATE_CONNECTPENDING) {
 
-		strlcat(cd->dst_telno, buf, sizeof(cd->dst_telno));
+		strlcat(cd->dst_telno, (const void *)buf, sizeof(cd->dst_telno));
 
 		if (capi_send_info_digits(cd, &digit, 1)) {
 		    return -1;
@@ -5127,7 +4786,7 @@ capi_handle_info_indication(_cmsg *CMSG, struct call_desc **pp_cd)
 
 		x = (ie_buf[2] & 0x0f);
 
-		snprintf(reason_buf, sizeof(reason_buf), "%d", x); 
+		snprintf((void *)reason_buf, sizeof(reason_buf), "%d", x); 
 
 		cd_verbose(cd, 3, 1, 3, "REDIRECTING NUMBER '%s', "
 			   "Reason=0x%02x\n", exten_buf, x);
@@ -5479,15 +5138,6 @@ capi_handle_data_b3_indication(_cmsg *CMSG, struct call_desc **pp_cd)
 
 	if (cd->options.wait_silence_samples) {
 		capi_detect_silence(cd, ptr_curr, len_curr);
-	}
-
-	/* software echo suppression */
-
-	if (cd->options.echo_suppress_in_software) {
-		soft_echo_suppress_process(cd,
-					   &cd->soft_es_rx, 
-					   &cd->soft_es_tx, 
-					   ptr_curr, len_curr);
 	}
 
 	/* convert sound last */
@@ -6013,7 +5663,7 @@ capi_handle_connect_indication(_cmsg *CMSG, struct call_desc **pp_cd)
              transfercapability2str(pbx_chan->transfercapability));
 #endif
 	pbx_builtin_setvar_helper(pbx_chan, "BCHANNELINFO", 
-				  &cd->bchannelinfo[0]);
+				  (void *)(cd->bchannelinfo));
 
 	snprintf(buffer, sizeof(buffer), "%d", cd->dst_ton);
 	pbx_builtin_setvar_helper(pbx_chan, "CALLEDTON", &buffer[0]);
@@ -6046,7 +5696,7 @@ capi_handle_connect_indication(_cmsg *CMSG, struct call_desc **pp_cd)
 #endif
 
 #ifdef CONNECT_IND_FLAG1
-	pbx_builtin_setvar_helper(pbx_chan, "NOT_E2E_DIGITAL", 
+	pbx_builtin_setvar_helper(pbx_chan, "PEER_IS_ANALOG", 
 	  (CONNECT_IND_FLAG1(CMSG) & CAPI_FLAG1_NOT_END_TO_END_DIGITAL) ?
 	  "1" : "0");
 #endif
@@ -6665,39 +6315,6 @@ chan_capi_cmd_receive_fax(struct call_desc *cd, struct call_desc *cd_unused,
 }
 
 /*---------------------------------------------------------------------------*
- *      chan_capi_cmd_echosquelch - set echo squelch
- *
- * param: "yes" or "no"
- *---------------------------------------------------------------------------*/
-static u_int16_t
-chan_capi_cmd_echosquelch(struct call_desc *cd, struct call_desc *cd_unknown,
-			  char *param)
-{
-	cc_mutex_assert(&cd->p_app->lock, MA_OWNED);
-
-	if (strcasecmp(param, "soft") == 0) {
-		cd->options.echo_cancel_in_software = 1;
-	} else if (strcasecmp(param, "fax") == 0) {
-		cd->options.echo_suppress_fax = 1;
-		cd->options.echo_suppress_in_software = 1;
-	} else if (ast_true(param)) {
-		cd->options.echo_suppress_fax = 0;
-		cd->options.echo_suppress_in_software = 1;
-	} else if (ast_false(param)) {
-		cd->options.echo_suppress_fax = 0;
-		cd->options.echo_suppress_in_software = 0;
-	} else {
-		cd_log(cd, LOG_WARNING, "Parameter, '%s', for "
-		       "echosquelch is invalid.\n", param);
-		return -1;
-	}
-	cd_verbose(cd, 2, 1, 4, "echosquelch switched %s%s\n",
-		   cd->options.echo_suppress_in_software ? "ON" : "OFF",
-		   cd->options.echo_suppress_fax ? " (FAX)" : "");
-	return 0;
-}
-
-/*---------------------------------------------------------------------------*
  *      chan_capi_cmd_malicious - report a malicious call
  *
  * param: not used
@@ -6922,7 +6539,6 @@ chan_capi_commands[] = {
 	{ "progress",     &chan_capi_cmd_progress,        1, 0, 0 },
 	{ "deflect",      &chan_capi_cmd_call_deflect,    1, 0, 1 },
 	{ "receivefax",   &chan_capi_cmd_receive_fax,     1, 0, 1 },
-	{ "echosquelch",  &chan_capi_cmd_echosquelch,     1, 0, 1 },
 	{ "malicious",    &chan_capi_cmd_malicious,       1, 0, 0 },
 	{ "hold",         &chan_capi_cmd_hold,            1, 0, 0 },
 	{ "holdtype",     &chan_capi_cmd_holdtype,        1, 0, 1 },
@@ -7784,7 +7400,6 @@ capi_parse_iface_config(struct ast_variable *v, const char *name)
 	cep->options.echo_cancel_option = EC_OPTION_DISABLE_G165;
 	cep->options.echo_cancel_tail = EC_DEFAULT_TAIL;
 	cep->options.echo_cancel_selector = FACILITYSELECTOR_ECHO_CANCEL;
-	cep->options.echo_suppress_offset = EC_POWER_OFFSET;
 
 	for (; v; v = v->next) {
 	    CONF_GET_INTEGER(v, b_channels_max, "devices");
@@ -7842,28 +7457,6 @@ capi_parse_iface_config(struct ast_variable *v, const char *name)
 	    CONF_GET_TRUE(v, cep->options.bridge, "bridge", 1);
 	    CONF_GET_TRUE(v, cep->options.ntmode, "ntmode", 1);
 	    CONF_GET_TRUE(v, cep->options.dtmf_generate, "dtmf_generate", 1);
-
-	    if((!strcasecmp(v->name, "echosquelch")) ||
-	       (!strcasecmp(v->name, "echo_squelch")) ||
-	       (!strcasecmp(v->name, "echosuppress")) ||
-	       (!strcasecmp(v->name, "echo_suppress"))) {
-
-	        if (strcasecmp(v->value, "fax") == 0) {
-		    cep->options.echo_suppress_fax = 1;
-		    cep->options.echo_suppress_in_software = 1;
-		} else if (ast_true(v->value)) {
-		    cep->options.echo_suppress_fax = 0;
-		    cep->options.echo_suppress_in_software = 1;
-		} else if (ast_false(v->value)) {
-		    cep->options.echo_suppress_fax = 0;
-		    cep->options.echo_suppress_in_software = 0;
-		} else {
-		    cc_log(LOG_ERROR, "Unknown echosquelch or "
-			   "echo_suppress parameter '%s' (ignored)\n",
-			   v->value);
-		}
-		continue;
-	    }
 
 	    if (!strcasecmp(v->name, "callgroup")) {
 	        cep->call_group = ast_get_group(v->value);
@@ -7934,17 +7527,6 @@ capi_parse_iface_config(struct ast_variable *v, const char *name)
 		continue;
 	    }
 
-	    if (!strcasecmp(v->name, "echo_offset")) {
-	        cep->options.echo_suppress_offset = atoi(v->value);
-		if (cep->options.echo_suppress_offset < 1) {
-		    cep->options.echo_suppress_offset = 1;
-		}
-		if (cep->options.echo_suppress_offset > EC_WINDOW_COUNT) {
-		    cep->options.echo_suppress_offset = EC_WINDOW_COUNT;
-		} 
-		continue;
-	    }
-
 	    cc_log(LOG_ERROR, "Unknown parameter "
 		   "'%s' = '%s' (ignored)\n", v->name, 
 		   v->value ? v->value : "");
@@ -7979,7 +7561,7 @@ capi_parse_iface_config(struct ast_variable *v, const char *name)
 	}
 
 	cc_verbose(2, 0, VERBOSE_PREFIX_3 "config entry '%s' T=(%s,%s,%d) "
-		   "C=[%d,%d] E=(%d,%d,%d,%d) G=(%f/%f) H=(%d)\n",
+		   "C=[%d,%d] E=(%d,%d,%d) G=(%f/%f) H=(%d)\n",
 		   cep->name, 
 		   cep->incomingmsn, 
 		   cep->context, 
@@ -7989,7 +7571,6 @@ capi_parse_iface_config(struct ast_variable *v, const char *name)
 		   cep->options.echo_cancel_in_hardware, 
 		   cep->options.echo_cancel_option, 
 		   cep->options.echo_cancel_tail,
-		   cep->options.echo_suppress_in_software, 
 		   cep->rx_gain,
 		   cep->tx_gain, 
 		   cep->call_group);

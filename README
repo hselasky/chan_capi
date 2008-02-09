@@ -159,6 +159,9 @@ CONNECTEDNUMBER
     Can be set before answering and if set, the content is used for
     IE 'Connected Number' on answering.
 
+PEER_IS_ANALOG
+    Is set for all incoming calls if the peer is analog.
+
 FAXEXTEN
     If chan_capi sends the call to extensions 'fax', the original extension number
     is saved in this variable.
