@@ -154,7 +154,7 @@ struct ring_buffer {
 
 #define CC_HOLDTYPE_LOCAL               0
 #define CC_HOLDTYPE_HOLD                1
-#define CC_HOLDTYPE_NOTIFY              2
+#define CC_HOLDTYPE_LOCAL_MOH           2
 
 /*
  * state combination for a normal incoming call:

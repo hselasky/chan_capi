@@ -34,6 +34,14 @@ echo "#ifndef CHAN_CAPI_CONFIG_H" >>$CONFIGFILE
 echo "#define CHAN_CAPI_CONFIG_H" >>$CONFIGFILE
 echo >>$CONFIGFILE
 
+if grep -q "ast_moh_start" $INCLUDEDIR/musiconhold.h; then
+	echo "#define CC_AST_MOH_PRESENT" >>$CONFIGFILE
+	echo " * found 'ast_moh_start'"
+else
+	echo "#undef CC_AST_MOH_PRESENT" >>$CONFIGFILE
+	echo " * no 'ast_moh_start'"
+fi
+
 if grep -q "struct ast_codec_pref" $INCLUDEDIR/channel.h; then
 	echo "#undef CC_OLD_CODEC_FORMATS" >>$CONFIGFILE
 	echo " * found 'struct ast_codec_pref'"

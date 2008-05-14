@@ -54,6 +54,9 @@
 #ifndef CC_AST_NO_DEVICESTATE
 #include <asterisk/devicestate.h>
 #endif
+#ifdef CC_AST_MOH_PRESENT
+#include <asterisk/musiconhold.h>
+#endif
 #include <sys/time.h>
 #include <sys/signal.h>
 #include <stdlib.h>
@@ -3779,13 +3782,13 @@ __chan_capi_call(struct call_desc *cd, const char *idest, int timeout)
 }
 
 /*---------------------------------------------------------------------------*
- *      __chan_capi_indicate - called from "ast_indicate()"
+ *      chan_capi_indicate_sub - called from "ast_indicate()"
  *
  * NOTE: "chan_capi" currently depens on the CAPI controller 
  * to generate indications.
  *---------------------------------------------------------------------------*/
 static int 
-__chan_capi_indicate(struct call_desc *cd, int condition)
+chan_capi_indicate_sub(struct call_desc *cd, const void *data, int condition)
 {
 	int error = 0;
 
@@ -3838,16 +3841,24 @@ __chan_capi_indicate(struct call_desc *cd, int condition)
 
 #ifdef CC_AST_CONTROL_HOLD
 	case AST_CONTROL_HOLD:
-		cd_verbose(cd, 3, 1, 2, "Requested HOLD-Indication\n");
-		if (cd->options.hold_type != CC_HOLDTYPE_LOCAL) {
+		cd_verbose(cd, 2, 1, 2, "Requested HOLD-Indication\n");
+		if (cd->options.hold_type == CC_HOLDTYPE_HOLD) {
 		    error = chan_capi_cmd_hold(cd, cd, NULL);
+		} else if (cd->options.hold_type == CC_HOLDTYPE_LOCAL_MOH) {
+#ifdef CC_AST_MOH_PRESENT
+		    error = ast_moh_start(cd->pbx_chan, data, "");
+#endif
 		}
 		break;
 
 	case AST_CONTROL_UNHOLD:
-		cd_verbose(cd, 3, 1, 2, "Requested UNHOLD-Indication\n");
-		if (cd->options.hold_type != CC_HOLDTYPE_LOCAL) {
+		cd_verbose(cd, 2, 1, 2, "Requested UNHOLD-Indication\n");
+		if (cd->options.hold_type == CC_HOLDTYPE_HOLD) {
 		    error = chan_capi_cmd_retrieve(cd, cd, NULL);
+		} else if (cd->options.hold_type == CC_HOLDTYPE_LOCAL_MOH) {
+#ifdef CC_AST_MOH_PRESENT
+		    ast_moh_stop(cd->pbx_chan);
+#endif
 		}
 		break;
 #endif
@@ -4313,8 +4324,11 @@ chan_capi_indicate(struct ast_channel *pbx_chan, int condition)
     cd_verbose(cd, 3, 0, 2, "\n");
 
     /* call descriptor is still valid */
-    error = __chan_capi_indicate(cd,condition);
-
+#if (CC_AST_VERSION >= 0x10400)
+    error = chan_capi_indicate_sub(cd,data,condition);
+#else
+    error = chan_capi_indicate_sub(cd,"",condition);
+#endif
     cd_unlock(cd);
 
  done:
@@ -4731,7 +4745,7 @@ capi_handle_info_indication(_cmsg *CMSG, struct call_desc **pp_cd)
 
 	case 0x0027:	/*  Notification Indicator */
 
-		switch (ie_buf[0]) {
+		switch (ie_buf[1]) {
 		case 0:
 		    desc = "User suspended";
 		    break;
@@ -4741,13 +4755,25 @@ capi_handle_info_indication(_cmsg *CMSG, struct call_desc **pp_cd)
 		case 2:
 		    desc = "Bearer service changed";
 		    break;
+#ifdef CC_AST_CONTROL_HOLD
+		case 0xf9: /* hold indicator */
+		    cd_send_pbx_frame(cd, AST_FRAME_CONTROL, 
+		      AST_CONTROL_HOLD, NULL, 0);
+		    desc = "Hold";
+		    break;
+		case 0xfa: /* retrieve indicator */
+		    cd_send_pbx_frame(cd, AST_FRAME_CONTROL,
+		       AST_CONTROL_UNHOLD, NULL, 0);
+		    desc = "Unhold";
+		    break;
+#endif
 		default:
 		    desc = "Unknown";
 		    break;
 		}
 
-		cd_verbose(cd, 3, 1, 3, "NOTIFICATION INDICATOR '%s' (0x%02x)\n",
-			   desc, ie_buf[0]);
+		cd_verbose(cd, 2, 1, 3, "NOTIFICATION INDICATOR '%s' (0x%02x)\n",
+			   desc, ie_buf[1]);
 		break;
 
 	case 0x0028:	/* Display */
@@ -4877,21 +4903,7 @@ capi_handle_info_indication(_cmsg *CMSG, struct call_desc **pp_cd)
 		break;
 
 	case 0x806e:	/* NOTIFY */
-		cd_verbose(cd, 3, 1, 3, "NOTIFY\n");
-
-		switch(ie_buf[1]) {
-#ifdef CC_AST_CONTROL_HOLD
-		case 0xf9: /* hold indicator */
-		    cd_send_pbx_frame(cd, AST_CONTROL_HOLD, 0, NULL, 0);
-		    break;
-
-		case 0xfa: /* retrieve indicator */
-		    cd_send_pbx_frame(cd, AST_CONTROL_UNHOLD, 0, NULL, 0);
-		    break;
-#endif
-		default:
-		    break;
-		}
+		cd_verbose(cd, 2, 1, 3, "NOTIFY\n");
 		break;
 
 	case 0x807b:	/* INFORMATION */
@@ -6395,8 +6407,8 @@ chan_capi_cmd_holdtype(struct call_desc *cd, struct call_desc *cd_unknown,
 
 	if (!strcasecmp(param, "hold")) {
 		cd->options.hold_type = CC_HOLDTYPE_HOLD;
-	} else if (!strcasecmp(param, "notify")) {
-		cd->options.hold_type = CC_HOLDTYPE_NOTIFY;
+	} else if (!strcasecmp(param, "local_moh")) {
+		cd->options.hold_type = CC_HOLDTYPE_LOCAL_MOH;
 	} else if (!strcasecmp(param, "local")) {
 		cd->options.hold_type = CC_HOLDTYPE_LOCAL;
 	} else {
@@ -7441,9 +7453,9 @@ capi_parse_iface_config(struct ast_variable *v, const char *name)
 
 		    cep->options.hold_type = CC_HOLDTYPE_HOLD;
 
-		} else if (!strcasecmp(v->value, "notify")) {
+		} else if (!strcasecmp(v->value, "local_moh")) {
 
-		    cep->options.hold_type = CC_HOLDTYPE_NOTIFY;
+		    cep->options.hold_type = CC_HOLDTYPE_LOCAL_MOH;
 
 		} else {
 
