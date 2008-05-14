@@ -2188,6 +2188,7 @@ cd_set_cep(struct call_desc *cd, struct config_entry_iface *cep)
 
     if(cd_alloc_channel(cd, channel_type)) {
 	cd->options = options_zero;
+	cd->cep = NULL;
 	return 1;
     }
 
