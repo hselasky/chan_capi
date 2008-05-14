@@ -2182,12 +2182,12 @@ cd_set_cep(struct call_desc *cd, struct config_entry_iface *cep)
     cd->cep = cep;
 
     if(cep == NULL) {
-        cd->options = options_zero;
+	cd->options = options_zero;
 	return 0;
     }
 
     if(cd_alloc_channel(cd, channel_type)) {
-        cd->options = options_zero;
+	cd->options = options_zero;
 	return 1;
     }
 
@@ -3558,13 +3558,13 @@ chan_capi_request(const char *type, const struct ast_codec_pref *formats,
 }
 
 /*---------------------------------------------------------------------------*
- *      __chan_capi_call - called from "ast_call()"
+ *      chan_capi_call_sub - called from "ast_call()"
  *
  * Outgoing call from PBX goes here, after that "chan_capi_request()" 
  * has been called.
  *---------------------------------------------------------------------------*/
 static int
-__chan_capi_call(struct call_desc *cd, const char *idest, int timeout)
+chan_capi_call_sub(struct call_desc *cd, const char *idest, int timeout)
 {
 	static u_int8_t bc_bprot_alaw[] = { 0x05, 0x04, 0x03, 0x80, 0x90, 0xA3 };
 	static u_int8_t bc_bprot_ulaw[] = { 0x05, 0x04, 0x03, 0x80, 0x90, 0xA2 };
@@ -3877,12 +3877,12 @@ chan_capi_indicate_sub(struct call_desc *cd, const void *data, int condition)
 }
 
 /*---------------------------------------------------------------------------*
- *      __chan_capi_bridge - called from "ast_channel_bridge()"
+ *      chan_capi_bridge_sub - called from "ast_channel_bridge()"
  *
  * This function implements "native bridging" or "line interconnect"
  *---------------------------------------------------------------------------*/
 static CC_BRIDGE_RETURN
-__chan_capi_bridge(struct call_desc *cd0,
+chan_capi_bridge_sub(struct call_desc *cd0,
 		   struct call_desc *cd1,
 		   int flags, 
 		   struct ast_frame **fo, 
@@ -4027,10 +4027,10 @@ __chan_capi_bridge(struct call_desc *cd0,
 }
 
 /*---------------------------------------------------------------------------*
- *      __chan_capi_answer - called from "ast_answer()"
+ *      chan_capi_answer_sub - called from "ast_answer()"
  *---------------------------------------------------------------------------*/
 static int
-__chan_capi_answer(struct call_desc *cd)
+chan_capi_answer_sub(struct call_desc *cd)
 {
 	static const u_int16_t bprot[3] = { 1, 1, 0 };
 	const char *temp;
@@ -4060,10 +4060,10 @@ __chan_capi_answer(struct call_desc *cd)
 }
 
 /*---------------------------------------------------------------------------*
- *      __chan_capi_read - called from "ast_read()"
+ *      chan_capi_read_sub - called from "ast_read()"
  *---------------------------------------------------------------------------*/
 static struct ast_frame * 
-__chan_capi_read(struct call_desc *cd)
+chan_capi_read_sub(struct call_desc *cd)
 {
 	struct ast_frame * p_frame = NULL;
 #if 0
@@ -4136,13 +4136,13 @@ __chan_capi_read(struct call_desc *cd)
 }
 
 /*---------------------------------------------------------------------------*
- *      __chan_capi_write - called from "ast_write()"
+ *      chan_capi_write_sub - called from "ast_write()"
  *
  * NOTE: if this function returns an error, then a softhangup
  * will be issued, which is not what one wants
  *---------------------------------------------------------------------------*/
 static int
-__chan_capi_write(struct call_desc *cd, struct ast_frame *frame)
+chan_capi_write_sub(struct call_desc *cd, struct ast_frame *frame)
 {
 	void *ptr;
 
@@ -4206,10 +4206,10 @@ __chan_capi_write(struct call_desc *cd, struct ast_frame *frame)
 }
 
 /*---------------------------------------------------------------------------*
- *      __chan_capi_send_digit - called from "ast_write()" and "ast_senddigit()"
+ *      chan_capi_send_digit_sub - called from "ast_write()" and "ast_senddigit()"
  *---------------------------------------------------------------------------*/
 static int
-__chan_capi_send_digit(struct call_desc *cd, const char digit)
+chan_capi_send_digit_sub(struct call_desc *cd, const char digit)
 {
 	u_int8_t buf[16];
 
@@ -4274,7 +4274,7 @@ chan_capi_call(struct ast_channel *pbx_chan, char *idest, int timeout)
     cd_verbose(cd, 3, 0, 2, "\n");
 
     /* call descriptor is still valid */
-    error = __chan_capi_call(cd,idest,timeout);
+    error = chan_capi_call_sub(cd,idest,timeout);
 
     cd_unlock(cd);
     return error;
@@ -4361,7 +4361,7 @@ chan_capi_bridge(struct ast_channel *pbx_chan0,
     cd_verbose(cd1, 3, 0, 2, "\n");
 
     /* call descriptors are still valid */
-    error = __chan_capi_bridge(cd0,cd1,flags,fo,rc
+    error = chan_capi_bridge_sub(cd0,cd1,flags,fo,rc
 #ifdef CC_AST_BRIDGE_WITH_TIMEOUTMS
 			       , timeoutms
 #endif
@@ -4387,7 +4387,7 @@ chan_capi_answer(struct ast_channel *pbx_chan)
 
     /* call descriptor is still valid */
 
-    error = __chan_capi_answer(cd);
+    error = chan_capi_answer_sub(cd);
 
     cd_unlock(cd);
 
@@ -4456,11 +4456,11 @@ chan_capi_read(struct ast_channel *pbx_chan)
         goto done;
     }
 
-    cd_verbose(cd, 3, 1, 2, "\n");
+    cd_verbose(cd, 5, 1, 2, "\n");
 
     /* call descriptor is still valid */
 
-    p_frame = __chan_capi_read(cd);
+    p_frame = chan_capi_read_sub(cd);
 
     cd_unlock(cd);
 
@@ -4482,11 +4482,11 @@ chan_capi_write(struct ast_channel *pbx_chan, struct ast_frame *p_frame)
         goto done;
     }
 
-    cd_verbose(cd, 3, 1, 2, "\n");
+    cd_verbose(cd, 5, 1, 2, "\n");
 
     /* call descriptor is still valid */
 
-    error = __chan_capi_write(cd, p_frame);
+    error = chan_capi_write_sub(cd, p_frame);
 
     cd_unlock(cd);
 
@@ -4522,7 +4522,7 @@ chan_capi_send_digit(struct ast_channel *pbx_chan, const char digit)
 
     /* call descriptor is still valid */
 
-    error = __chan_capi_send_digit(cd,digit);
+    error = chan_capi_send_digit_sub(cd,digit);
 
     cd_unlock(cd);
 
@@ -6702,6 +6702,7 @@ do_periodic(void *data)
 	struct ast_channel *pbx_chan;
 	struct call_desc *cd;
 	u_int32_t temp;
+	u_int32_t limit;
 	u_int16_t x;
 
 	while (1) {
@@ -6726,8 +6727,9 @@ do_periodic(void *data)
 			    /* compute time since last digit was received  */
 
 			    temp = p_app->application_uptime - cd->digit_time_last;
+			    limit = (cd->dst_telno[0] ? cd->options.digit_time_out : 15);
 
-			    if ((temp >= (cd->dst_telno[0] ? cd->options.digit_time_out : 15)) ||
+			    if ((temp >= limit) ||
 				(cd->flags.sending_complete_received)) {
 
 			        search_cep(cd);
