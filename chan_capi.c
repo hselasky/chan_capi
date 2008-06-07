@@ -1082,6 +1082,8 @@ capi_application_free(struct cc_capi_application *p_app)
 
     cc_mutex_unlock(&p_app->lock);
 
+    capi20_be_free(p_app->cbe_p);
+
     free(p_app);
 
     return;
@@ -1094,20 +1096,28 @@ static struct cc_capi_application *
 capi_application_alloc()
 {
     struct cc_capi_application *p_app;
+    struct capi20_backend *cbe_p;
     u_int32_t error;
     u_int32_t app_id;
 
-    error = capi20_isinstalled();
+    error = capi20_be_alloc_i4b(&cbe_p);
+    if (error) {
+        cc_log(LOG_WARNING, "Cannot allocate I4B CAPI "
+	       "backend!\n");
+	return NULL;
+    }
 
+    error = capi20_isinstalled(cbe_p);
     if (error) {
         cc_log(LOG_WARNING, "The CAPI device is "
 	       "not present or accessible!\n");
+        capi20_be_free(cbe_p);
 	return NULL;
     }
 #if (CAPI_OS_HINT == 2)
-    error = capi20_register(CAPI_BCHANS, (CAPI_MAX_B3_BLOCKS+1)/2,
-			    CAPI_MAX_B3_BLOCK_SIZE, &app_id,
-			    CAPI_STACK_VERSION);
+    error = capi20_register(cbe_p, CAPI_BCHANS, (CAPI_MAX_B3_BLOCKS+1)/2,
+			    CAPI_MAX_B3_BLOCK_SIZE,
+			    CAPI_STACK_VERSION, &app_id);
 #else
     error = capi20_register(CAPI_BCHANS, (CAPI_MAX_B3_BLOCKS+1)/2,
 			    CAPI_MAX_B3_BLOCK_SIZE, &app_id);
@@ -1115,6 +1125,7 @@ capi_application_alloc()
     if (error) {
         cc_log(LOG_NOTICE, "unable to register a CAPI application, "
 	       "error=0x%04x!\n", error);
+        capi20_be_free(cbe_p);
 	return NULL;
     }
 
@@ -1132,6 +1143,7 @@ capi_application_alloc()
 
     p_app->cd_alloc_rate_max = 16; /* max 16 calls per second */
     p_app->application_id = app_id;
+    p_app->cbe_p = cbe_p;
 
     error = ast_pthread_create(&p_app->monitor_thread, NULL, &capi_do_monitor, p_app);
 
@@ -1154,6 +1166,7 @@ capi_application_alloc()
       cc_mutex_unlock(&do_periodic_lock);
     } else {
       capi20_release(app_id);
+      capi20_be_free(cbe_p);
     }
     return NULL;
 }
@@ -7242,7 +7255,7 @@ chan_capi_fill_controller_info(struct cc_capi_application *p_app,
 #if (CAPI_OS_HINT == 1)
 	error = capi20_get_profile(controller_unit, (CAPIProfileBuffer_t *)&profile);
 #elif (CAPI_OS_HINT == 2)
-	error = capi20_get_profile(controller_unit, &profile, sizeof(profile));
+	error = capi20_get_profile(p_app->cbe_p, controller_unit, &profile, sizeof(profile));
 #else
 	error = capi20_get_profile(controller_unit, (u_int8_t *)&profile);
 #endif

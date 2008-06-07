@@ -639,6 +639,9 @@ struct cc_capi_application {
 	/* temporary controller pointer */	
 	struct cc_capi_controller *temp_p_ctrl;
 
+	/* CAPI backend pointer */
+	struct capi20_backend *cbe_p;
+
 	pthread_t monitor_thread;
 	u_int8_t monitor_thread_created : 1;
 	u_int8_t cd_alloc_rate_warned : 1;
