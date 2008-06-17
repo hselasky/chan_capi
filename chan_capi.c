@@ -3860,7 +3860,11 @@ chan_capi_indicate_sub(struct call_desc *cd, const void *data, int condition)
 		    error = chan_capi_cmd_hold(cd, cd, NULL);
 		} else if (cd->options.hold_type == CC_HOLDTYPE_LOCAL_MOH) {
 #ifdef CC_AST_MOH_PRESENT
+#if (CC_AST_VERSION >= 0x10400)
 		    error = ast_moh_start(cd->pbx_chan, data, "");
+#else
+		    error = ast_moh_start(cd->pbx_chan, data);
+#endif
 #endif
 		}
 		break;
