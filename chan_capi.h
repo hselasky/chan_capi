@@ -342,6 +342,9 @@ struct cc_capi_options {
 	/* CAPI digit timeout, in seconds */
 	u_int16_t digit_time_out;
 
+	/* CAPI alert timeout, in seconds */
+	u_int16_t alert_time_out;
+
 	/* CAPI wait silence, in samples */
 	u_int16_t wait_silence_samples;
 
@@ -360,6 +363,7 @@ struct config_entry_global {
 	float tx_gain;
 	int capability;
 	u_int16_t digit_time_out; /* in seconds */
+	u_int16_t alert_time_out; /* in seconds */
 };
 
 /* interface config entry structure */
@@ -471,6 +475,9 @@ struct call_desc {
 	/*! CAPI time of last received digit */
 	u_int32_t digit_time_last;
 
+	/*! CAPI time proceeding was received */
+	u_int32_t proc_time_last;
+
 	/*! CAPI white noise generator remainder */
 	u_int32_t white_noise_rem;
 
@@ -566,6 +573,9 @@ struct call_desc {
 
 	/* current number of silence bytes */
 	u_int16_t wait_silence_count;
+
+	/* received proceeding */
+	u_int8_t proc_received;
 
 	/* --- END OF ZERO DEFAULT REGION --- */
 

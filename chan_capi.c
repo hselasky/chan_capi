@@ -3646,6 +3646,13 @@ chan_capi_call_sub(struct call_desc *cd, const char *idest, int timeout)
 		return -1;
 	}
 
+	if ((p = pbx_builtin_getvar_helper(pbx_chan, "ALERTTIMEOUT"))) {
+		cd->options.alert_time_out = atoi(p);
+		if (cd->options.alert_time_out > 120) {
+			cd->options.alert_time_out = 120;
+		}
+	}
+
 #ifdef CC_AST_CHANNEL_HAS_CID
 	CLIR = pbx_chan->cid.cid_pres;
 	callernplan = pbx_chan->cid.cid_ton & 0x7f;
@@ -4871,6 +4878,14 @@ capi_handle_info_indication(_cmsg *CMSG, struct call_desc **pp_cd)
 		if (cd->flags.b3_on_alert) {
 		    cd_send_pbx_progress(cd);
 		}
+		/* clear any alert timeouts */
+		if (cd->options.alert_time_out != 0) {
+		    cd_verbose(cd, 3, 1, 3, "clearing alert "
+		      "timeout of %u seconds\n", 
+		      cd->options.alert_time_out);
+		    cd->options.alert_time_out = 0;
+		}
+
 		cd_verbose(cd, 3, 1, 3, "ALERTING\n");
 		cd_send_pbx_frame(cd, AST_FRAME_CONTROL, 
 				  AST_CONTROL_RINGING, NULL, 0);
@@ -4880,6 +4895,8 @@ capi_handle_info_indication(_cmsg *CMSG, struct call_desc **pp_cd)
 		cd_verbose(cd, 3, 1, 3, "CALL PROCEEDING\n");
 		cd_send_pbx_frame(cd, AST_FRAME_CONTROL,
 				  AST_CONTROL_PROCEEDING, NULL, 0);
+		cd->proc_received = 1;
+		cd->proc_time_last = cd->p_app->application_uptime;
 		break;
 
 	case 0x8003:	/* PROGRESS */
@@ -6740,12 +6757,39 @@ do_periodic(void *data)
 		    cd = p_app->cd_root_ptr;
 		    while (cd) {
 
+			if (cd->pbx_chan && 
+			    (cd->state == CAPI_STATE_CONNECTPENDING) &&
+			    (cd->proc_received != 0)) {
+			    /* 
+			     * Compute time since call proceeding was
+			     * received:
+			     */
+			    temp = p_app->application_uptime - 
+			      cd->proc_time_last;
+			    limit = cd->options.alert_time_out;
+
+			    if ((limit != 0) && (temp >= limit)) {
+				cc_verbose(3, 0, VERBOSE_PREFIX_4 
+					   "ALERT indication not "
+					   "received within %u "
+					   "seconds! Hanging up "
+					   "pbx_chan=%p\n",
+					   limit, cd->pbx_chan);
+				/* hangup */
+				cd_free(cd, 1);
+				cd = NULL;
+				goto repeat;
+			    }
+			}
+
 			if (cd->pbx_chan && (cd->state == CAPI_STATE_DID)) {
 
 			    /* compute time since last digit was received  */
 
-			    temp = p_app->application_uptime - cd->digit_time_last;
-			    limit = (cd->dst_telno[0] ? cd->options.digit_time_out : 15);
+			    temp = p_app->application_uptime - 
+			      cd->digit_time_last;
+			    limit = (cd->dst_telno[0] ? 
+				     cd->options.digit_time_out : 15);
 
 			    if ((temp >= limit) ||
 				(cd->flags.sending_complete_received)) {
@@ -6771,7 +6815,8 @@ do_periodic(void *data)
 			    pbx_chan = cd->hangup_chan;
 			    cd->hangup_chan = NULL;
 			    cc_mutex_unlock(&p_app->lock);
-			    cc_verbose(3, 0, VERBOSE_PREFIX_4 "Out of order hangup, "
+			    cc_verbose(3, 0, VERBOSE_PREFIX_4 
+				       "Out of order hangup, "
 				       "pbx_chan=%p\n", pbx_chan);
 			    ast_hangup(pbx_chan);
 			    cc_mutex_lock(&p_app->lock);	
@@ -6784,7 +6829,8 @@ do_periodic(void *data)
 			    pbx_chan = cd->free_chan;
 			    cd->free_chan = NULL;
 			    cc_mutex_unlock(&p_app->lock);
-			    cc_verbose(3, 0, VERBOSE_PREFIX_4 "Out of order channel free, "
+			    cc_verbose(3, 0, VERBOSE_PREFIX_4 
+				       "Out of order channel free, "
 				       "pbx_chan=%p\n", pbx_chan);
 			    ast_channel_free(pbx_chan);
 			    cc_mutex_lock(&p_app->lock);
@@ -7457,6 +7503,7 @@ capi_parse_iface_config(struct ast_variable *v, const char *name)
 			     "wait_silence_samples");
 
 	    CONF_GET_INTEGER(v, cep->options.digit_time_out, "digit_timeout");
+	    CONF_GET_INTEGER(v, cep->options.alert_time_out, "alert_timeout");
 
 	    CONF_GET_TRUE(v, cep->options.dtmf_detect_in_software, "softdtmf", 1);
 	    CONF_GET_TRUE(v, cep->options.dtmf_detect_relax, "relaxdtmf", 1);
@@ -7629,6 +7676,7 @@ chan_capi_parse_global_config(struct ast_variable *v,
 	cep->tx_gain = 1.0;
 	cep->capability = AST_FORMAT_ALAW;
 	cep->digit_time_out = 5; /* seconds */
+	cep->alert_time_out = 0; /* let kernel decide */
 
 	/* parse the general section */
 
@@ -7678,7 +7726,15 @@ chan_capi_parse_global_config(struct ast_variable *v,
 		if(cep->digit_time_out > 32) {
 		   cep->digit_time_out = 32; /* seconds */
 		}
+	    } else if (!strcasecmp(v->name, "alert_timeout")) {
+
+	        cep->alert_time_out = atoi(v->value);
+
+		if(cep->alert_time_out > 120) {
+		   cep->alert_time_out = 120; /* seconds */
+		}
 	    }
+
 	}
 	return;
 }
