@@ -6775,6 +6775,8 @@ do_periodic(void *data)
 					   "seconds! Hanging up "
 					   "pbx_chan=%p\n",
 					   limit, cd->pbx_chan);
+				/* set a sensible hangup cause */
+				cd->wCause_in = 0x3429; /* temporary failure */
 				/* hangup */
 				cd_free(cd, 1);
 				cd = NULL;
