@@ -1951,13 +1951,11 @@ cd_free(struct call_desc *cd, u_int8_t hangup_what)
 
 	    /* register when alert was received */
 	    if (cd->alert_received) {
-	      char buf[14];
-	      snprintf(buf, sizeof(buf), "%u", 
-	          (uint32_t)(cd->p_app->application_uptime -
-		  cd->alert_time_last));
-	      pbx_builtin_setvar_helper(pbx_chan, "ALERTTIME", buf);
-	    } else {
-	      pbx_builtin_setvar_helper(pbx_chan, "ALERTTIME", "0");
+	        pbx_chan->rings =
+	             (uint32_t)(cd->p_app->application_uptime -
+				cd->alert_time_last);
+		if (pbx_chan->rings == 0)
+			pbx_chan->rings = 1;
 	    }
 	}
 
