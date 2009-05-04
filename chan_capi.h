@@ -478,6 +478,9 @@ struct call_desc {
 	/*! CAPI time proceeding was received */
 	u_int32_t proc_time_last;
 
+	/*! CAPI time alert was received */
+	u_int32_t alert_time_last;
+
 	/*! CAPI white noise generator remainder */
 	u_int32_t white_noise_rem;
 
@@ -575,7 +578,10 @@ struct call_desc {
 	u_int16_t wait_silence_count;
 
 	/* received proceeding */
-	u_int8_t proc_received;
+	u_int8_t proc_received:1;
+
+	/* received alert */
+	u_int8_t alert_received:1;
 
 	/* --- END OF ZERO DEFAULT REGION --- */
 

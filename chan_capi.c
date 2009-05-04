@@ -1948,6 +1948,17 @@ cd_free(struct call_desc *cd, u_int8_t hangup_what)
 	    pbx_chan->hangupcause =
 	      ((wCause_in & 0xFF00) == 0x3400) ?
 	      (wCause_in & 0x7F) : AST_CAUSE_NORMAL_CLEARING;
+
+	    /* register when alert was received */
+	    if (cd->alert_received) {
+	      char buf[14];
+	      snprintf(buf, sizeof(buf), "%u", 
+	          (uint32_t)(cd->p_app->application_uptime -
+		  cd->alert_time_last));
+	      pbx_builtin_setvar_helper(pbx_chan, "ALERTTIME", buf);
+	    } else {
+	      pbx_builtin_setvar_helper(pbx_chan, "ALERTTIME", "0");
+	    }
 	}
 
 	if (hard_hangup) {
@@ -4875,6 +4886,9 @@ capi_handle_info_indication(_cmsg *CMSG, struct call_desc **pp_cd)
 		break;
 
 	case 0x8001:	/* ALERTING */
+		if (!cd->flags.dir_outgoing)
+			break;	/* invalid message */
+
 		if (cd->flags.b3_on_alert) {
 		    cd_send_pbx_progress(cd);
 		}
@@ -4885,6 +4899,9 @@ capi_handle_info_indication(_cmsg *CMSG, struct call_desc **pp_cd)
 		      cd->options.alert_time_out);
 		    cd->options.alert_time_out = 0;
 		}
+		/* register when alert was received */
+		cd->alert_received = 1;
+		cd->alert_time_last = cd->p_app->application_uptime;
 
 		cd_verbose(cd, 3, 1, 3, "ALERTING\n");
 		cd_send_pbx_frame(cd, AST_FRAME_CONTROL, 
