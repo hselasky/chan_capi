@@ -6933,13 +6933,18 @@ static int
 chan_capi_reload(int fd, int argc, char *argv[])
 #endif
 {
-#if (CC_AST_VERSION >= 0x10600)
-    int fd = a->fd;
-    int argc = a->argc;
-#endif
     uint16_t error = 0;
     struct cc_capi_application *p_app = NULL;
     struct ast_config * cfg = NULL;
+#if (CC_AST_VERSION >= 0x10600)
+    int fd = a->fd;
+    int argc = a->argc;
+    switch (cmd) {
+    case CLI_INIT:
+    case CLI_GENERATE:
+	return NULL; 
+    }
+#endif
 
     if (argc != 2) {
 #if (CC_AST_VERSION >= 0x10600)
@@ -7020,6 +7025,11 @@ chan_capi_get_channel_info(int fd, int argc, char *argv[])
     int fd = a->fd;
     int argc = a->argc;
     char **argv = a->argv;
+    switch (cmd) {
+    case CLI_INIT:
+    case CLI_GENERATE:
+	return NULL; 
+    }
 #endif
     struct call_desc *cd;
     struct cc_capi_application *p_app = capi_application[0];
@@ -7082,10 +7092,6 @@ static int
 chan_capi_get_info(int fd, int argc, char *argv[])
 #endif
 {
-#if (CC_AST_VERSION >= 0x10600)
-    int fd = a->fd;
-    int argc = a->argc;
-#endif
     struct cc_capi_application *p_app;
     struct config_entry_iface *cep;
     struct call_desc *cd;
@@ -7093,6 +7099,15 @@ chan_capi_get_info(int fd, int argc, char *argv[])
     uint16_t use_count_on_hold[CAPI_MAX_CONTROLLERS] = { /* zero */ };
     uint16_t n;
     uint16_t x;
+#if (CC_AST_VERSION >= 0x10600)
+    int fd = a->fd;
+    int argc = a->argc;
+    switch (cmd) {
+    case CLI_INIT:
+    case CLI_GENERATE:
+	return NULL; 
+    }
+#endif
 
     if ((argc != 2) && (argc != 3)) {
 #if (CC_AST_VERSION >= 0x10600)
@@ -7220,6 +7235,11 @@ chan_capi_enable_debug(int fd, int argc, char *argv[])
 #if (CC_AST_VERSION >= 0x10600)
     int fd = a->fd;
     int argc = a->argc;
+    switch (cmd) {
+    case CLI_INIT:
+    case CLI_GENERATE:
+	return NULL; 
+    }
 #endif
 
     if (argc != 2) {
@@ -7249,6 +7269,11 @@ chan_capi_disable_debug(int fd, int argc, char *argv[])
 #if (CC_AST_VERSION >= 0x10600)
     int fd = a->fd;
     int argc = a->argc;
+    switch (cmd) {
+    case CLI_INIT:
+    case CLI_GENERATE:
+	return NULL; 
+    }
 #endif
 
     if (argc != 3) {
@@ -7271,19 +7296,22 @@ chan_capi_disable_debug(int fd, int argc, char *argv[])
  */
 
 #if (CC_AST_VERSION >= 0x10600)
-#define I_CMDS .cmda = 
-#define I_FUNC .handler = 
-#define I_SUMMARY .summary = 
-#define I_USAGE .usage = 
+#define	I_CMDS .cmda = 
+#define	I_FUNC .handler = 
+#define	I_SUMMARY .summary = 
+#define	I_USAGE .usage = 
+#define	I_CMD2(x) .command = x,
 #else
-#define I_CMDS 
-#define I_FUNC 
-#define I_SUMMARY 
-#define I_USAGE
+#define	I_CMDS 
+#define	I_FUNC 
+#define	I_SUMMARY 
+#define	I_USAGE
+#define	I_CMD2(x)
 #endif
 
 static struct ast_cli_entry  cli_reload =
 	{ I_CMDS { "capi", "reload", NULL },
+	  I_CMD2("capi reload")
 	  I_FUNC chan_capi_reload,
 	  I_SUMMARY "Reload CAPI configuration",
 	  I_USAGE "Usage: capi reload\n"
@@ -7291,6 +7319,7 @@ static struct ast_cli_entry  cli_reload =
 
 static struct ast_cli_entry  cli_info =
 	{ I_CMDS { "capi", "info", NULL },
+	  I_CMD2("capi info")
 	  I_FUNC chan_capi_get_info, 
 	  I_SUMMARY "Show CAPI info",
 	  I_USAGE "Usage: capi info\n"
@@ -7298,6 +7327,7 @@ static struct ast_cli_entry  cli_info =
 
 static struct ast_cli_entry  cli_show_channel =
 	{ I_CMDS { "capi", "show", "channel", NULL },
+	  I_CMD2("capi show channel")
 	  I_FUNC chan_capi_get_channel_info, 
 	  I_SUMMARY "Show information about an active CAPI channel",
 	  I_USAGE "Usage: capi show channel <id>\n"
@@ -7305,6 +7335,7 @@ static struct ast_cli_entry  cli_show_channel =
 
 static struct ast_cli_entry  cli_show_channels =
 	{ I_CMDS { "capi", "show", "channels", NULL },
+	  I_CMD2("capi show channels")
 	  I_FUNC chan_capi_get_info, 
 	  I_SUMMARY "Show active CAPI channels",
 	  I_USAGE "Usage: capi show channels\n"
@@ -7312,6 +7343,7 @@ static struct ast_cli_entry  cli_show_channels =
 
 static struct ast_cli_entry  cli_debug =
 	{ I_CMDS { "capi", "debug", NULL },
+	  I_CMD2("capi debug")
 	  I_FUNC chan_capi_enable_debug, 
 	  I_SUMMARY "Enable CAPI debugging",
 	  I_USAGE "Usage: capi debug\n"
@@ -7319,6 +7351,7 @@ static struct ast_cli_entry  cli_debug =
 
 static struct ast_cli_entry  cli_no_debug =
 	{ I_CMDS { "capi", "no", "debug", NULL },
+	  I_CMD2("capi no debug")
 	  I_FUNC chan_capi_disable_debug, 
 	  I_SUMMARY "Disable CAPI debugging", 
 	  I_USAGE "Usage: capi no debug\n"
