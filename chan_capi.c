@@ -2828,7 +2828,7 @@ capi_send_connect_resp(struct call_desc *cd, uint16_t wReject,
 	     * connected equipment:
 	     */
 #if (CC_AST_VERSION >= 0x10600)
-	    microtime(&t);
+	    t = ast_tvnow();
 #else
 	    t = time(NULL);
 #endif
