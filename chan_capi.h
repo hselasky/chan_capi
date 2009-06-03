@@ -47,15 +47,15 @@
 #define FIFO_BF_SIZE     (CAPI_MAX_B3_BLOCKS * FIFO_BLOCK_SIZE) /* bytes */
 
 struct ring_buffer {
-    u_int8_t  data[FIFO_BF_SIZE];
+    uint8_t  data[FIFO_BF_SIZE];
 
-    u_int16_t bf_read_pos;
-    u_int16_t bf_write_pos;
-    u_int16_t bf_free_len;
-    u_int16_t bf_used_len;
+    uint16_t bf_read_pos;
+    uint16_t bf_write_pos;
+    uint16_t bf_free_len;
+    uint16_t bf_used_len;
 
-    u_int16_t end_pos;
-    u_int8_t  last_byte;
+    uint16_t end_pos;
+    uint8_t  last_byte;
 };
 
 /*
@@ -86,9 +86,9 @@ struct ring_buffer {
  */
 #define CC_MUTEX_DEFINE_STATIC AST_MUTEX_DEFINE_STATIC
 #define cc_mutex_init(x) ast_mutex_init(x)
-#define cc_mutex_lock(x) { if(ast_mutex_lock(x) || ast_mutex_lock(x)) cc_log(LOG_NOTICE, "locking error\n"); }
-#define cc_mutex_unlock(x) { if(ast_mutex_unlock(x) || ast_mutex_unlock(x)) cc_log(LOG_NOTICE, "double unlock\n"); }
-#define cc_mutex_assert(x,what) __cc_mutex_assert(x,what,__FILE__,__PRETTY_FUNCTION__,__LINE__)
+#define cc_mutex_lock(x) do { ast_mutex_lock(x); } while (0)
+#define cc_mutex_unlock(x) do { ast_mutex_unlock(x); } while (0)
+#define cc_mutex_assert(x,what) do { } while (0)
 #define MA_OWNED        0x01
 #define MA_NOTOWNED     0x02
 #define MA_RECURSED     0x04
@@ -190,166 +190,166 @@ struct ring_buffer {
 struct cc_capi_support {
 
 	/* features: */
-	u_int32_t dtmf : 1;
-	u_int32_t echo_cancel : 1;
-	u_int32_t sservices : 1; /* supplementray services */
-	u_int32_t lineinterconnect : 1;
+	uint32_t dtmf : 1;
+	uint32_t echo_cancel : 1;
+	uint32_t sservices : 1; /* supplementray services */
+	uint32_t lineinterconnect : 1;
 
 	/* supported sservices: */
-	u_int32_t holdretrieve : 1;
-	u_int32_t terminalportability : 1;
-	u_int32_t ECT : 1;
-	u_int32_t threePTY : 1;
-	u_int32_t CF : 1;
-	u_int32_t CD : 1;
-	u_int32_t MCID : 1;
-	u_int32_t CCBS : 1;
-	u_int32_t MWI : 1;
-	u_int32_t CCNR : 1;
-	u_int32_t CONF : 1;
+	uint32_t holdretrieve : 1;
+	uint32_t terminalportability : 1;
+	uint32_t ECT : 1;
+	uint32_t threePTY : 1;
+	uint32_t CF : 1;
+	uint32_t CD : 1;
+	uint32_t MCID : 1;
+	uint32_t CCBS : 1;
+	uint32_t MWI : 1;
+	uint32_t CCNR : 1;
+	uint32_t CONF : 1;
 };
 
 struct cc_capi_flags {
 
 	/* set if outgoing call: */
-	u_int32_t dir_outgoing : 1;
+	uint32_t dir_outgoing : 1;
 
 	/* set if sending complete has been received */
-	u_int32_t sending_complete_received : 1;
+	uint32_t sending_complete_received : 1;
 
 	/* set if "release complete" should be sent upon calldescriptor free */
-	u_int32_t send_release_complete : 1;
+	uint32_t send_release_complete : 1;
 
 	/* set if the destination is not using ISDN */
-	u_int32_t dst_telno_is_not_isdn : 1;
+	uint32_t dst_telno_is_not_isdn : 1;
 
 	/* set if "chan_capi" should set FAX protocol 
 	 * when B-channel has been disconnected
 	 */
-	u_int32_t fax_set_prot_on_b3_disc : 1;
+	uint32_t fax_set_prot_on_b3_disc : 1;
 
 	/* set if "chan_capi" is pending to receive a FAX */
-	u_int32_t fax_pending : 1;
+	uint32_t fax_pending : 1;
 
 	/* set if "chan_capi" is receiving a FAX */
-	u_int32_t fax_receiving : 1;
+	uint32_t fax_receiving : 1;
 
 	/* set if "chan_capi" has already handled a FAX */
-	u_int32_t fax_handled : 1;
+	uint32_t fax_handled : 1;
 
 	/* set if "chan_capi" received a FAX in error */
-	u_int32_t fax_error : 1;
+	uint32_t fax_error : 1;
 
 	/* set if early B3 is enabled on progress */
-	u_int32_t b3_on_progress : 1;
+	uint32_t b3_on_progress : 1;
 
 	/* set if early B3 is enabled on alert */
-	u_int32_t b3_on_alert : 1;
+	uint32_t b3_on_alert : 1;
 
 	/* set if the B3 link is active or up */
-	u_int32_t b3_active : 1;
+	uint32_t b3_active : 1;
 
 	/* set if the B3 link is pending to become active */
-	u_int32_t b3_pending : 1;
+	uint32_t b3_pending : 1;
 
 	/* set if this call descriptor is on hold */
-	u_int32_t hold_is_active : 1;
+	uint32_t hold_is_active : 1;
 
 	/* set if this call descriptor is pending to or from hold */
-	u_int32_t hold_is_pending : 1;
+	uint32_t hold_is_pending : 1;
 
 	/* set if line interconnect is active */
-	u_int32_t line_interconnect_active : 1;
+	uint32_t line_interconnect_active : 1;
 
 	/* set if "disconnect" has been received */
-	u_int32_t disconnect_received : 1;
+	uint32_t disconnect_received : 1;
 
 	/* set if "progress" has been sent */
-	u_int32_t progress_transmitted : 1;
+	uint32_t progress_transmitted : 1;
 
 	/* set if "progress" has been received */
-	u_int32_t progress_received : 1;
+	uint32_t progress_received : 1;
 
 	/* set if "ECT" is pending */
-	u_int32_t ect_pending : 1;
+	uint32_t ect_pending : 1;
 
 	/* set if "ECT" should be sent on B3 disc. indication */
-	u_int32_t send_ect_on_b3_disc : 1;
+	uint32_t send_ect_on_b3_disc : 1;
 
 	/* set if SETUP message was received */
-	u_int32_t setup_received : 1;
+	uint32_t setup_received : 1;
 
 	/* set if the PBX extension search ended */
-	u_int32_t pbx_search_complete : 1;
+	uint32_t pbx_search_complete : 1;
 
 	/* set if the PBX has been started */
-	u_int32_t pbx_started : 1;
+	uint32_t pbx_started : 1;
 
 	/* set if the PBX has been set to state UP */
-	u_int32_t pbx_state_up : 1;
+	uint32_t pbx_state_up : 1;
 
 	/* set if the "CONNECTEDNUMBER" variable was set */
-	u_int32_t connected_number_set : 1;
+	uint32_t connected_number_set : 1;
 
 	/* set if the "SETUP" message was received */
-	u_int32_t received_setup : 1;
+	uint32_t received_setup : 1;
 
         /* set if retrive req should be sent on hold ind */
-	u_int32_t send_retrieve_req_on_hold_ind : 1;
+	uint32_t send_retrieve_req_on_hold_ind : 1;
 
 	/* set if late inband signalling is enabled */
-	u_int32_t want_late_inband : 1;
+	uint32_t want_late_inband : 1;
 };
 
 struct cc_capi_options {
 
 	/* set if NT-mode is selected: */
-	u_int32_t ntmode : 1;
+	uint32_t ntmode : 1;
 
 	/* set if "s" extension should be used 
 	 * for empty destination telephone numbers:
 	 */
-	u_int32_t immediate : 1;
+	uint32_t immediate : 1;
 
 	/* set if sending complete should be forced */
-	u_int32_t send_complete_force : 1;
+	uint32_t send_complete_force : 1;
 
 	/* set if line interconnect is allowed: */
-	u_int32_t bridge : 1;
+	uint32_t bridge : 1;
 
 	/* set if hardware echo canceling is enabled */
-	u_int32_t echo_cancel_in_hardware : 1;
+	uint32_t echo_cancel_in_hardware : 1;
 
 	/* set if software echo canceling is enabled */
-	u_int32_t echo_cancel_in_software : 1;
+	uint32_t echo_cancel_in_software : 1;
 
 	/* set if DTMF detection should be done in software. 
 	 * Else in hardware:
 	 */
-	u_int32_t dtmf_detect_in_software : 1;
+	uint32_t dtmf_detect_in_software : 1;
 
 	/* set if relaxed DTMF detection should be done */
-	u_int32_t dtmf_detect_relax : 1;
+	uint32_t dtmf_detect_relax : 1;
 
 	/* set if DTMF should be generated by CAPI */
-	u_int32_t dtmf_generate : 1;
+	uint32_t dtmf_generate : 1;
 
 	/* CAPI echo cancel parameters (active CAPI devices) */
-	u_int16_t echo_cancel_option;
-	u_int16_t echo_cancel_tail;
-	u_int16_t echo_cancel_selector;
+	uint16_t echo_cancel_option;
+	uint16_t echo_cancel_tail;
+	uint16_t echo_cancel_selector;
 
 	/* CAPI digit timeout, in seconds */
-	u_int16_t digit_time_out;
+	uint16_t digit_time_out;
 
 	/* CAPI alert timeout, in seconds */
-	u_int16_t alert_time_out;
+	uint16_t alert_time_out;
 
 	/* CAPI wait silence, in samples */
-	u_int16_t wait_silence_samples;
+	uint16_t wait_silence_samples;
 
 	/* CAPI hold type */
-	u_int8_t hold_type;
+	uint8_t hold_type;
 };
 
 /* global config entry structure */
@@ -362,8 +362,8 @@ struct config_entry_global {
 	float rx_gain;
 	float tx_gain;
 	int capability;
-	u_int16_t digit_time_out; /* in seconds */
-	u_int16_t alert_time_out; /* in seconds */
+	uint16_t digit_time_out; /* in seconds */
+	uint16_t alert_time_out; /* in seconds */
 };
 
 /* interface config entry structure */
@@ -386,7 +386,7 @@ struct config_entry_iface {
    * dummies are zeroed by default
    */
 
-        u_int8_t dummy_zero_start[1];
+        uint8_t dummy_zero_start[1];
 
 	/* language */
 	char language[MAX_LANGUAGE];
@@ -407,8 +407,8 @@ struct config_entry_iface {
 
 	struct cc_capi_options options;
 
-	u_int32_t call_group;
-	u_int32_t group;
+	uint32_t call_group;
+	uint32_t group;
 
 #define CC_GET_BIT(var,x)			\
   ((var)[(x)/8] & (1 << ((x) % 8)))
@@ -417,20 +417,20 @@ struct config_entry_iface {
   (var)[(x)/8] |= (1 << ((x) % 8))
 
 	/* controller bit-mask */
-	u_int8_t controller_mask[(CAPI_MAX_CONTROLLERS+7)/8];
+	uint8_t controller_mask[(CAPI_MAX_CONTROLLERS+7)/8];
 
-	u_int8_t controller_first; /* inclusive */
-	u_int8_t controller_last; /* inclusive */
+	uint8_t controller_first; /* inclusive */
+	uint8_t controller_last; /* inclusive */
 
 	float tx_gain;
 	float rx_gain;
 
-	u_int8_t tx_convert[256];
-	u_int8_t rx_convert[256];
+	uint8_t tx_convert[256];
+	uint8_t rx_convert[256];
 
 	struct config_entry_iface *next;
 
-	u_int8_t dummy_zero_end[1];
+	uint8_t dummy_zero_end[1];
 };
 
 struct cc_capi_application;
@@ -453,7 +453,7 @@ struct call_desc {
 	 * "cd_free()" will automatically zero
 	 * all variables in this region!
 	 */
-	u_int8_t dummy_zero_start[1];
+	uint8_t dummy_zero_start[1];
 
 	/*! CAPI echo canceller ring buffer */
 	struct ring_buffer ring_buf;
@@ -473,35 +473,35 @@ struct call_desc {
 	struct ast_channel *pbx_chan;
 
 	/*! CAPI time of last received digit */
-	u_int32_t digit_time_last;
+	uint32_t digit_time_last;
 
 	/*! CAPI time proceeding was received */
-	u_int32_t proc_time_last;
+	uint32_t proc_time_last;
 
 	/*! CAPI time alert was received */
-	u_int32_t alert_time_last;
+	uint32_t alert_time_last;
 
 	/*! CAPI white noise generator remainder */
-	u_int32_t white_noise_rem;
+	uint32_t white_noise_rem;
 
 	/*! CAPI configuration entry pointer */
 	struct config_entry_iface *cep;
 	
 	/*! CAPI message number */
-	u_int16_t msg_num;
+	uint16_t msg_num;
 
 	/*! CAPI connection indentificators */
-	u_int16_t msg_plci;
-	u_int32_t msg_ncci;
+	uint16_t msg_plci;
+	uint32_t msg_ncci;
 
 	/*! CAPI explicit call transfer indentificator */
-	u_int16_t ect_plci;
+	uint16_t ect_plci;
 
 	/*! CAPI Common ISDN Profile, CIP */
-	u_int16_t msg_cip;
+	uint16_t msg_cip;
 
 	/*! state of call descriptor */
-	u_int8_t state;
+	uint8_t state;
 
 	/*! CAPI flags */
 	struct cc_capi_flags flags;
@@ -512,52 +512,52 @@ struct call_desc {
 	/*! CAPI controller features (copy from config) */
 	struct cc_capi_support support;
 
-	u_int8_t bchannelinfo[4];
+	uint8_t bchannelinfo[4];
 
 	/*! CAPI source telephone number, if available */
 	char src_telno[AST_MAX_EXTENSION];	
 
 	/*! CAPI source telephone number type */
-	u_int8_t src_ton;
+	uint8_t src_ton;
 
 	/*! CAPI source telephone number presentation */
-	u_int8_t src_pres;
+	uint8_t src_pres;
 
 	/*! CAPI destination telephone number, if available */
 	char dst_telno[AST_MAX_EXTENSION];
 
 	/*! CAPI destination telephone number type */
-	u_int8_t dst_ton;
+	uint8_t dst_ton;
 
 	/*! Number of bytes to strip from the beginning of the
 	 *  telephone number.
 	 */
-	u_int16_t dst_strip_len;
+	uint16_t dst_strip_len;
 
 	/*! CAPI transmit queue length */
-	u_int16_t tx_queue_len;
+	uint16_t tx_queue_len;
 
 	/*! CAPI receive buffer */
-	u_int8_t  rx_buffer_data[(CAPI_MAX_B3_BLOCK_SIZE + 
+	uint8_t  rx_buffer_data[(CAPI_MAX_B3_BLOCK_SIZE + 
 				  AST_FRIENDLY_OFFSET) * CAPI_MAX_B3_BLOCKS];
 
 #define RX_BUFFER_BY_HANDLE(cd, handle) \
   ((cd)->rx_buffer_data + AST_FRIENDLY_OFFSET + \
    ((CAPI_MAX_B3_BLOCK_SIZE + AST_FRIENDLY_OFFSET) * (handle)))
 
-	u_int16_t rx_buffer_len[CAPI_MAX_B3_BLOCKS];
+	uint16_t rx_buffer_len[CAPI_MAX_B3_BLOCKS];
 
-	u_int16_t rx_buffer_handle;
-	u_int16_t rx_noise_count;
+	uint16_t rx_buffer_handle;
+	uint16_t rx_noise_count;
 
 	/*! CAPI hangup cause received */
-	u_int16_t wCause_in;
+	uint16_t wCause_in;
 
 	/*! CAPI B3 hangup cause received */
-	u_int16_t wCause_in_b3;
+	uint16_t wCause_in_b3;
 
 	/*! CAPI hangup cause transmitted */
-	u_int16_t wCause_out;
+	uint16_t wCause_out;
 
 	/*! CAPI receive FAX file pointer */
 	FILE *fax_file;
@@ -566,26 +566,26 @@ struct call_desc {
 	char *fax_fname;
 
 	/*! CAPI structure: B3 config */
-	u_int8_t b3_config[128];
+	uint8_t b3_config[128];
 
 	/**/
-	u_int8_t channel_type;
+	uint8_t channel_type;
 
 	/* last received DTMF digit */
 	int last_dtmf_digit;
 
 	/* current number of silence bytes */
-	u_int16_t wait_silence_count;
+	uint16_t wait_silence_count;
 
 	/* received proceeding */
-	u_int8_t proc_received:1;
+	uint8_t proc_received:1;
 
 	/* received alert */
-	u_int8_t alert_received:1;
+	uint8_t alert_received:1;
 
 	/* --- END OF ZERO DEFAULT REGION --- */
 
-	u_int8_t dummy_zero_end[1];
+	uint8_t dummy_zero_end[1];
 
 	/*! Next call descriptor in list */
 	struct call_desc *next;
@@ -595,14 +595,14 @@ struct cc_capi_profile {
 
 	/* NOTE: all fields are little endian */
 
-	u_int8_t ncontrollers[2];
-	u_int8_t nbchannels[2];
-	u_int8_t globaloptions[4];
-	u_int8_t b1protocols[4];
-	u_int8_t b2protocols[4];
-	u_int8_t b3protocols[4];
-	u_int8_t reserved3[6*4];
-	u_int8_t manufacturer[5*4];
+	uint8_t ncontrollers[2];
+	uint8_t nbchannels[2];
+	uint8_t globaloptions[4];
+	uint8_t b1protocols[4];
+	uint8_t b2protocols[4];
+	uint8_t b3protocols[4];
+	uint8_t reserved3[6*4];
+	uint8_t manufacturer[5*4];
 
 } __attribute__((__packed__));
 
@@ -614,34 +614,34 @@ struct cc_capi_application {
 	ast_mutex_t lock;
 
 	/*! CAPI application ID */
-	u_int32_t application_id;
+	uint32_t application_id;
 
 	/*! CAPI application uptime, in seconds */
-	u_int32_t application_uptime;
+	uint32_t application_uptime;
   
 	/*! number of CAPI applications sleeping */
-	u_int16_t sleep_count;
+	uint16_t sleep_count;
 
 	/*! CAPI message number (other) */
-	u_int16_t message_number_other;
+	uint16_t message_number_other;
 
 	/*! CAPI message number (dial) */
-	u_int16_t message_number_dial;
+	uint16_t message_number_dial;
 
 	/* current call descriptor allocation rate */
-	u_int16_t cd_alloc_rate_curr;
+	uint16_t cd_alloc_rate_curr;
 
 	/* the highest call descriptor allocation rate so far */
-	u_int16_t cd_alloc_rate_record;
+	uint16_t cd_alloc_rate_record;
 
 	/* maximum call descriptor allocation rate (exclusive) */
-	u_int16_t cd_alloc_rate_max;
+	uint16_t cd_alloc_rate_max;
 
 	/* call descriptor allocation count (total) */
-        u_int32_t cd_alloc_stats;
+        uint32_t cd_alloc_stats;
 
 	/* call descriptor free count (total) */
-        u_int32_t cd_free_stats;
+        uint32_t cd_free_stats;
 
 	/* number of call descriptors currently in use */
 	int32_t cd_root_used;
@@ -659,15 +659,15 @@ struct cc_capi_application {
 	struct capi20_backend *cbe_p;
 
 	pthread_t monitor_thread;
-	u_int8_t monitor_thread_created : 1;
-	u_int8_t cd_alloc_rate_warned : 1;
-	u_int8_t received_listen_conf : 1;
-	u_int8_t received_facility_conf : 1;
+	uint8_t monitor_thread_created : 1;
+	uint8_t cd_alloc_rate_warned : 1;
+	uint8_t received_listen_conf : 1;
+	uint8_t received_facility_conf : 1;
 };
 
 struct cc_capi_controller {
 
-	u_int16_t b_channels_max;
+	uint16_t b_channels_max;
 
 	/* valid:
 	 * ======
@@ -676,7 +676,7 @@ struct cc_capi_controller {
 	 * 0: profile was retrieved with 
 	 *    error.
 	 */
-	u_int8_t valid; 
+	uint8_t valid; 
 
 	struct cc_capi_support support;
 };

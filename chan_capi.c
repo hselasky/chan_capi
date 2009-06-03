@@ -1,5 +1,5 @@
 /*-
- * Copyright (c) 2006-2007 Hans Petter Selasky. All rights reserved.
+ * Copyright (c) 2006-2009 Hans Petter Selasky. All rights reserved.
  * Copyright (C) 2005 Cytronics & Melware, Armin Schindler
  * Copyright (C) 2002-2005 Junghanns.NET GmbH, Klaus-Peter Junghanns
  * 
@@ -147,7 +147,7 @@ static ast_mutex_t capi_verbose_lock;
 
 static pthread_t periodic_thread;
 
-static u_int16_t chan_capi_load_level = 0;
+static uint16_t chan_capi_load_level = 0;
 
 static struct config_entry_global capi_global;
 
@@ -155,7 +155,7 @@ static struct cc_capi_application *capi_application[CAPI_MAX_APPLICATIONS];
 
 static struct cc_capi_controller capi_controller[CAPI_MAX_CONTROLLERS];
 
-static u_int8_t capi_controller_used_mask[(CAPI_MAX_CONTROLLERS+7)/8];
+static uint8_t capi_controller_used_mask[(CAPI_MAX_CONTROLLERS+7)/8];
 
 static struct config_entry_iface *cep_root_ptr;
 
@@ -163,14 +163,14 @@ static struct config_entry_iface *cep_free_ptr;
 
 static const char * const empty_string = "\0\0";
 
-static const u_int8_t sending_complete_struct[] = { 2, 1, 0 };
+static const uint8_t sending_complete_struct[] = { 2, 1, 0 };
 
-static const u_int8_t sending_not_complete_struct[] = { 2, 0, 0 };
+static const uint8_t sending_not_complete_struct[] = { 2, 0, 0 };
 
 static uint8_t update_use_count = 0;
 
 /* external prototypes */
-extern const char *capi_info_string(u_int16_t wInfo);
+extern const char *capi_info_string(uint16_t wInfo);
 
 /*===========================================================================*
  * ring buffer routines
@@ -179,7 +179,7 @@ extern const char *capi_info_string(u_int16_t wInfo);
 static void
 buf_init(struct ring_buffer *buffer)
 {
-    bzero(buffer, sizeof(*buffer));
+    memset(buffer, 0, sizeof(*buffer));
     buffer->end_pos = sizeof(buffer->data);
     buffer->last_byte = 0xFF; /* ISDN default */
 
@@ -189,9 +189,9 @@ buf_init(struct ring_buffer *buffer)
 
 static void
 buf_write_block(struct ring_buffer *buffer, 
-		const u_int8_t *data, u_int16_t len_data)
+		const uint8_t *data, uint16_t len_data)
 {
-    u_int16_t len_max = buffer->end_pos - buffer->bf_write_pos;
+    uint16_t len_max = buffer->end_pos - buffer->bf_write_pos;
 
     if (len_data > buffer->bf_free_len) {
 
@@ -215,23 +215,23 @@ buf_write_block(struct ring_buffer *buffer,
 
 	/* wrapped write */
 
-	bcopy(data, &(buffer->data[buffer->bf_write_pos]), len_max);
+	memcpy(&(buffer->data[buffer->bf_write_pos]), data, len_max);
 
 	buffer->bf_write_pos = 0;
 	len_data -= len_max;
 	data += len_max;
     }
 
-    bcopy(data, &buffer->data[buffer->bf_write_pos], len_data);
+    memcpy(&buffer->data[buffer->bf_write_pos], data, len_data);
     buffer->bf_write_pos += len_data;
     return;
 }
 
 static void
-buf_read_block(struct ring_buffer *buffer, void **p_ptr, u_int16_t *p_len)
+buf_read_block(struct ring_buffer *buffer, void **p_ptr, uint16_t *p_len)
 {
-    u_int8_t temp[FIFO_BLOCK_SIZE];
-    u_int16_t len;
+    uint8_t temp[FIFO_BLOCK_SIZE];
+    uint16_t len;
 
     if(buffer->bf_used_len < FIFO_BLOCK_SIZE) {
 
@@ -337,40 +337,13 @@ strlcat(dst, src, siz)
 }
 #endif
 
-static void
-__cc_mutex_assert(ast_mutex_t *p_lock, u_int32_t flags, 
-		  const char *file, const char *func, u_int32_t line)
-{
-#if 0 
-    /* this is not the right way to do it, but one can enable
-     * this code to have some kind of mutex assertion.
-     */
-    int locked = ast_mutex_unlock(p_lock);
-
-    if(locked == 0) ast_mutex_lock(p_lock);
-
-    locked = (locked == 0);
-
-    if(locked && (flags & MA_NOTOWNED)) {
-      cc_log(LOG_ERROR, "Mutex is owned at %s:%s:%d!\n",
-	     file, func, line);
-    }
-
-    if((!locked) && (flags & MA_OWNED)) {
-      cc_log(LOG_ERROR, "Mutex is not owned at %s:%s:%d!\n",
-	     file, func, line);
-    }
-#endif
-    return;
-}
-
 /* simple counter */
 
-static u_int32_t
+static uint32_t
 capi_get_counter()
 {
-    static u_int32_t count = 0;
-    u_int32_t temp;
+    static uint32_t count = 0;
+    uint32_t temp;
     cc_mutex_lock(&capi_global_lock);
     temp = count++;
     cc_mutex_unlock(&capi_global_lock);
@@ -379,11 +352,11 @@ capi_get_counter()
 
 /* check if a CAPI structure read, at the given offset, is valid */
 
-static u_int8_t
-capi_get_valid(const void *ptr, u_int16_t offset)
+static uint8_t
+capi_get_valid(const void *ptr, uint16_t offset)
 {
-    const u_int8_t *data = (const u_int8_t *)ptr;
-    u_int16_t len;
+    const uint8_t *data = (const uint8_t *)ptr;
+    uint16_t len;
 
     if (data == NULL) {
         return 0;
@@ -399,11 +372,11 @@ capi_get_valid(const void *ptr, u_int16_t offset)
 
 /* read a byte from a CAPI structure */
 
-static u_int8_t
-capi_get_1(const void *ptr, u_int16_t offset)
+static uint8_t
+capi_get_1(const void *ptr, uint16_t offset)
 {
-    const u_int8_t *data = (const u_int8_t *)ptr;
-    u_int16_t len;
+    const uint8_t *data = (const uint8_t *)ptr;
+    uint16_t len;
 
     if (data == NULL) {
         return 0;
@@ -421,16 +394,16 @@ capi_get_1(const void *ptr, u_int16_t offset)
 
 /* read a word from a CAPI structure */
 
-static u_int16_t 
-capi_get_2(const void *ptr, u_int16_t offset)
+static uint16_t 
+capi_get_2(const void *ptr, uint16_t offset)
 {
     return (capi_get_1(ptr,offset)|(capi_get_1(ptr,offset+1) << 8));
 }
 
 /* read a dword from a CAPI structure */
 
-static u_int32_t 
-capi_get_4(const void *ptr, u_int16_t offset)
+static uint32_t 
+capi_get_4(const void *ptr, uint16_t offset)
 {
     return (capi_get_2(ptr,offset)|(capi_get_2(ptr,offset+2) << 16));
 }
@@ -438,11 +411,11 @@ capi_get_4(const void *ptr, u_int16_t offset)
 /* convert a CAPI structure into a zero terminated string */
 
 static void
-capi_get_multi_1(const void *src, u_int16_t offset, 
-		 void *dst, u_int16_t max_len)
+capi_get_multi_1(const void *src, uint16_t offset, 
+		 void *dst, uint16_t max_len)
 {
-    const u_int8_t *data = (const u_int8_t *)src;
-    u_int16_t len;
+    const uint8_t *data = (const uint8_t *)src;
+    uint16_t len;
 
     if (max_len == 0) {
         return;
@@ -470,7 +443,7 @@ capi_get_multi_1(const void *src, u_int16_t offset,
     }
 
     if (offset >= len) {
-        ((u_int8_t *)dst)[0] = 0;
+        ((uint8_t *)dst)[0] = 0;
 	return;
     }
 
@@ -481,8 +454,8 @@ capi_get_multi_1(const void *src, u_int16_t offset,
         len = max_len;
     }
 
-    bcopy(data, dst, len);
-    ((u_int8_t *)dst)[len] = '\0';
+    memcpy(dst, data, len);
+    ((uint8_t *)dst)[len] = '\0';
 
     return;
 }
@@ -490,10 +463,10 @@ capi_get_multi_1(const void *src, u_int16_t offset,
 /* write a byte to a CAPI structure */
 
 static void
-capi_put_1(void *ptr, u_int16_t offset, u_int8_t value)
+capi_put_1(void *ptr, uint16_t offset, uint8_t value)
 {
-    u_int8_t *data = (u_int8_t *)ptr;
-    u_int16_t len;
+    uint8_t *data = (uint8_t *)ptr;
+    uint16_t len;
 
     if (data == NULL) {
         return;
@@ -516,7 +489,7 @@ capi_put_1(void *ptr, u_int16_t offset, u_int8_t value)
 /* write a word to a CAPI structure */
 
 static void
-capi_put_2(void *ptr, u_int16_t offset, u_int16_t value)
+capi_put_2(void *ptr, uint16_t offset, uint16_t value)
 {
     capi_put_1(ptr, offset, value);
     capi_put_1(ptr, offset+1, value >> 8);
@@ -526,7 +499,7 @@ capi_put_2(void *ptr, u_int16_t offset, u_int16_t value)
 /* write a dword to a CAPI structure */
 
 static void
-capi_put_4(void *ptr, u_int16_t offset, u_int32_t value)
+capi_put_4(void *ptr, uint16_t offset, uint32_t value)
 {
     capi_put_2(ptr, offset, value);
     capi_put_2(ptr, offset+2, value >> 16);
@@ -536,13 +509,13 @@ capi_put_4(void *ptr, u_int16_t offset, u_int32_t value)
 /* build a CAPI structure */
 
 static void
-capi_build_struct(void *dst, u_int16_t max_len, 
-		  const void *src1, u_int16_t len1, 
-		  const void *src2, u_int16_t len2,
-		  const void *src3, u_int16_t len3)
+capi_build_struct(void *dst, uint16_t max_len, 
+		  const void *src1, uint16_t len1, 
+		  const void *src2, uint16_t len2,
+		  const void *src3, uint16_t len3)
 {
-    u_int32_t temp = (len1 + len2 + len3);
-    u_int8_t *dst_ptr = (u_int8_t *)dst;
+    uint32_t temp = (len1 + len2 + len3);
+    uint8_t *dst_ptr = (uint8_t *)dst;
 
     if (max_len < 3) {
         /* just forget it */
@@ -582,7 +555,7 @@ capi_build_struct(void *dst, u_int16_t max_len,
 
         temp = min(max_len, len1);
 
-	bcopy(src1, dst_ptr, temp);
+	memcpy(dst_ptr, src1, temp);
 
 	dst_ptr += temp;
 	max_len -= temp;
@@ -592,7 +565,7 @@ capi_build_struct(void *dst, u_int16_t max_len,
 
         temp = min(max_len, len2);
 
-	bcopy(src2, dst_ptr, temp);
+	memcpy(dst_ptr, src2, temp);
 
 	dst_ptr += temp;
 	max_len -= temp;
@@ -602,7 +575,7 @@ capi_build_struct(void *dst, u_int16_t max_len,
 
         temp = min(max_len, len3);
 
-	bcopy(src3, dst_ptr, temp);
+	memcpy(dst_ptr, src3, temp);
 
 	dst_ptr += temp;
 	max_len -= temp;
@@ -614,10 +587,10 @@ capi_build_struct(void *dst, u_int16_t max_len,
 
 static void
 capi_copy_sound(const void *_src, void *_dst, 
-		u_int16_t len, const u_int8_t *p_table)
+		uint16_t len, const uint8_t *p_table)
 {
-    const u_int8_t *src = (const u_int8_t *)(_src);
-    u_int8_t       *dst = (u_int8_t *)(_dst);
+    const uint8_t *src = (const uint8_t *)(_src);
+    uint8_t       *dst = (uint8_t *)(_dst);
 
     if (p_table) {
 
@@ -640,7 +613,7 @@ capi_copy_sound(const void *_src, void *_dst,
     } else {
 
         if(src != dst) {
-	    bcopy(src,dst,len);
+		memcpy(dst, src,len);
 	}
     }
     return;
@@ -649,7 +622,7 @@ capi_copy_sound(const void *_src, void *_dst,
 /*  command to string function */
 
 static const char *
-capi_command_to_string(u_int16_t wCmd)
+capi_command_to_string(uint16_t wCmd)
 {
     enum { lowest_value = CAPI_P_MIN,
 	   end_value = CAPI_P_MAX,
@@ -685,7 +658,7 @@ capi_command_to_string(u_int16_t wCmd)
 /*  show the text for a CAPI message info value */
 
 static void 
-capi_show_info(u_int16_t info)
+capi_show_info(uint16_t info)
 {
     const char *p;
 	
@@ -694,7 +667,7 @@ capi_show_info(u_int16_t info)
         return;
     }
 
-    if (!(p = capi_info_string((u_int32_t)info))) {
+    if (!(p = capi_info_string((uint32_t)info))) {
         /* message not available */
         return;
     }
@@ -707,8 +680,8 @@ capi_show_info(u_int16_t info)
 /* show error in confirmation */
 
 static void
-capi_show_conf_error(struct call_desc *cd, u_int32_t PLCI, 
-		     u_int16_t wInfo, u_int16_t wCmd)
+capi_show_conf_error(struct call_desc *cd, uint32_t PLCI, 
+		     uint16_t wInfo, uint16_t wCmd)
 {
     const char *name = chan_capi_pbx_type;
 
@@ -736,9 +709,9 @@ capi_show_conf_error(struct call_desc *cd, u_int32_t PLCI,
 /* prototypes */
 
 static void
-cd_free(struct call_desc *cd, u_int8_t hangup_what);
+cd_free(struct call_desc *cd, uint8_t hangup_what);
 
-static u_int8_t
+static uint8_t
 cd_set_cep(struct call_desc *cd, struct config_entry_iface *cep);
 
 static void
@@ -747,27 +720,27 @@ cd_root_shrink(struct call_desc *cd);
 static void *
 capi_do_monitor(void *data);
 
-static u_int16_t
+static uint16_t
 capi_send_disconnect_req(struct call_desc *cd);
 
-static u_int16_t
-capi_send_connect_resp(struct call_desc *cd, u_int16_t wReject, 
-		       const u_int16_t *p_bprot);
-static u_int16_t
+static uint16_t
+capi_send_connect_resp(struct call_desc *cd, uint16_t wReject, 
+		       const uint16_t *p_bprot);
+static uint16_t
 capi_send_connect_b3_req(struct call_desc *cd);
 
 static void
 capi_handle_cmsg(struct cc_capi_application *p_app, _cmsg *CMSG);
 
-static u_int16_t
+static uint16_t
 chan_capi_cmd_progress(struct call_desc *cd, struct call_desc *cd_unknown, 
 		       char *param);
 
-static u_int16_t
+static uint16_t
 chan_capi_cmd_retrieve(struct call_desc *cd, struct call_desc *cd_unknown, 
 		       char *param);
 
-static u_int16_t
+static uint16_t
 chan_capi_cmd_hold(struct call_desc *cd, struct call_desc *cd_unknown, 
 		   char *param);
 
@@ -776,23 +749,23 @@ static void
 chan_capi_fill_pvt(struct ast_channel *pbx_chan);
 #endif
 
-static u_int16_t
+static uint16_t
 chan_capi_fill_controller_info(struct cc_capi_application *p_app,
-			       const u_int16_t controller_unit);
+			       const uint16_t controller_unit);
 
 static struct call_desc *
 cd_by_pbx_chan(struct ast_channel *pbx_chan);
 
 static int 
 cd_send_pbx_frame(struct call_desc *cd, int frametype, int subclass, 
-		  const void *data, u_int16_t len);
-static u_int8_t
-capi_application_usleep(struct cc_capi_application *p_app, u_int32_t us);
+		  const void *data, uint16_t len);
+static uint8_t
+capi_application_usleep(struct cc_capi_application *p_app, uint32_t us);
 
 static int
 chan_capi_scan_config(struct ast_config *cfg);
 
-static u_int16_t
+static uint16_t
 chan_capi_post_init(struct cc_capi_application *p_app);
 
 #define CD_IS_UNUSED(cd)			\
@@ -927,12 +900,12 @@ cep_alloc(const char *name)
 	cep = malloc(sizeof(*cep));
 
 	if (cep) {
-	    bzero(cep, sizeof(*cep));
+	    memset(cep, 0, sizeof(*cep));
 	    strlcpy(cep->name, name, sizeof(cep->name));
 	}
     } else {
 
-        bzero(&cep->dummy_zero_start[0],
+        memset(&cep->dummy_zero_start[0], 0, 
 	      &cep->dummy_zero_end[0] -
 	      &cep->dummy_zero_start[0]);
     }
@@ -1097,8 +1070,8 @@ capi_application_alloc()
 {
     struct cc_capi_application *p_app;
     struct capi20_backend *cbe_p;
-    u_int32_t error;
-    u_int32_t app_id;
+    uint32_t error;
+    uint32_t app_id;
 
     error = capi20_be_alloc_i4b(&cbe_p);
     if (error) {
@@ -1135,7 +1108,7 @@ capi_application_alloc()
         goto error;
     }
 
-    bzero(p_app, sizeof(*p_app));
+    memset(p_app, 0, sizeof(*p_app));
 
     cc_mutex_init(&p_app->lock);
 
@@ -1174,8 +1147,8 @@ capi_application_alloc()
 /*---------------------------------------------------------------------------*
  *      capi_application_usleep - sleep a CAPI application
  *---------------------------------------------------------------------------*/
-static u_int8_t
-capi_application_usleep(struct cc_capi_application *p_app, u_int32_t us)
+static uint8_t
+capi_application_usleep(struct cc_capi_application *p_app, uint32_t us)
 {
     cc_mutex_assert(&p_app->lock, MA_OWNED);
 
@@ -1203,7 +1176,7 @@ capi_application_usleep(struct cc_capi_application *p_app, u_int32_t us)
 /*---------------------------------------------------------------------------*
  *      get_msg_num_other - get a new CAPI message number
  *---------------------------------------------------------------------------*/
-static u_int16_t
+static uint16_t
 get_msg_num_other(struct cc_capi_application *p_app)
 {
     cc_mutex_assert(&p_app->lock, MA_OWNED);
@@ -1224,7 +1197,7 @@ get_msg_num_other(struct cc_capi_application *p_app)
  * NOTE: one does not want to mix "dial" message numbers with
  *       the "other" message numbers !
  *---------------------------------------------------------------------------*/
-static u_int16_t
+static uint16_t
 get_msg_num_dial(struct cc_capi_application *p_app)
 {
     cc_mutex_assert(&p_app->lock, MA_OWNED);
@@ -1295,7 +1268,7 @@ cd_mutex_lock_double(struct call_desc *cd0,
 /*---------------------------------------------------------------------------*
  *      cd_mutex_lock_double_pbx_chan - lock two PBX channels
  *---------------------------------------------------------------------------*/
-static u_int8_t
+static uint8_t
 cd_mutex_lock_double_pbx_chan(struct ast_channel *pbx_chan0,
 			      struct ast_channel *pbx_chan1,
 			      struct call_desc **pp_cd0,
@@ -1354,8 +1327,8 @@ cd_mutex_lock_double_pbx_chan(struct ast_channel *pbx_chan0,
  *
  * returns 0 on success. Else call descriptor is gone.
  *---------------------------------------------------------------------------*/
-static u_int8_t
-cd_usleep(struct call_desc *cd0, struct call_desc *cd1, u_int32_t us)
+static uint8_t
+cd_usleep(struct call_desc *cd0, struct call_desc *cd1, uint32_t us)
 {
     struct ast_channel *pbx_chan0;
     struct ast_channel *pbx_chan1;
@@ -1498,7 +1471,7 @@ cd_root_grow(struct cc_capi_application *p_app)
 
     if (cd) {
 
-        bzero(cd, sizeof(*cd));
+        memset(cd, 0, sizeof(*cd));
 
 	cd->p_app = p_app;
 
@@ -1525,7 +1498,7 @@ cd_root_grow(struct cc_capi_application *p_app)
  *      cd_by_plci - find call descriptor by CAPI PLCI
  *---------------------------------------------------------------------------*/
 static struct call_desc *
-cd_by_plci(struct cc_capi_application *p_app, u_int16_t plci)
+cd_by_plci(struct cc_capi_application *p_app, uint16_t plci)
 {
     struct call_desc *cd;
 
@@ -1559,7 +1532,7 @@ cd_by_plci(struct cc_capi_application *p_app, u_int16_t plci)
  *      cd_by_plci_on_hold - find "on hold" call descriptor by CAPI PLCI
  *---------------------------------------------------------------------------*/
 static struct call_desc *
-cd_by_plci_on_hold(struct cc_capi_application *p_app, u_int16_t plci)
+cd_by_plci_on_hold(struct cc_capi_application *p_app, uint16_t plci)
 {
     struct call_desc *cd;
 
@@ -1575,12 +1548,12 @@ cd_by_plci_on_hold(struct cc_capi_application *p_app, u_int16_t plci)
  *      pbx_chan_by_plci_on_hold - find "on hold" PBX channel by CAPI PLCI
  *---------------------------------------------------------------------------*/
 static struct ast_channel *
-pbx_chan_by_plci_on_hold(u_int16_t plci)
+pbx_chan_by_plci_on_hold(uint16_t plci)
 {
     struct call_desc *cd;
     struct ast_channel *pbx_chan = NULL;
     struct cc_capi_application *p_app;
-    u_int16_t n;
+    uint16_t n;
 
     for(n = 0; n < CAPI_MAX_APPLICATIONS; n++) 
     {
@@ -1627,7 +1600,7 @@ cd_by_pbx_chan(struct ast_channel *pbx_chan)
 #else
     struct call_desc *cd = NULL;
     struct cc_capi_application *p_app;
-    u_int16_t n;
+    uint16_t n;
 
     for(n = 0; n < CAPI_MAX_APPLICATIONS; n++) 
     {
@@ -1669,7 +1642,7 @@ cd_by_pbx_chan(struct ast_channel *pbx_chan)
  *      cd_by_msg_num - find call descriptor by message number
  *---------------------------------------------------------------------------*/
 static struct call_desc *
-cd_by_msg_num(struct cc_capi_application *p_app, u_int16_t msg_num)
+cd_by_msg_num(struct cc_capi_application *p_app, uint16_t msg_num)
 {
     struct call_desc *cd;
 
@@ -1697,7 +1670,7 @@ cd_by_msg_num(struct cc_capi_application *p_app, u_int16_t msg_num)
  *      plci_to_controller - return CAPI controller by PLCI
  *---------------------------------------------------------------------------*/
 static struct cc_capi_controller *
-plci_to_controller(u_int8_t controller)
+plci_to_controller(uint8_t controller)
 {
     return &capi_controller[(controller < CAPI_MAX_CONTROLLERS) ? 
 			    controller : (CAPI_MAX_CONTROLLERS-1)];
@@ -1750,8 +1723,8 @@ cd_free_channel(struct call_desc *cd)
  *
  * NOTE: must be called with "p_app->lock" locked
  *---------------------------------------------------------------------------*/
-static u_int8_t
-cd_alloc_channel(struct call_desc *cd, u_int8_t channel_type)
+static uint8_t
+cd_alloc_channel(struct call_desc *cd, uint8_t channel_type)
 {
     struct config_entry_iface *cep = cd->cep;
 
@@ -1812,15 +1785,15 @@ cd_alloc_channel(struct call_desc *cd, u_int8_t channel_type)
  * NOTE: must be called with "p_app->lock" locked
  *---------------------------------------------------------------------------*/
 static void
-cd_free(struct call_desc *cd, u_int8_t hangup_what)
+cd_free(struct call_desc *cd, uint8_t hangup_what)
 {
     struct ast_channel *pbx_chan = cd->pbx_chan;
     struct cc_capi_application *p_app = cd->p_app;
-    u_int16_t wCause_in = cd->wCause_in;
-    u_int8_t hard_hangup = ((cd->flags.pbx_started == 0) &&
+    uint16_t wCause_in = cd->wCause_in;
+    uint8_t hard_hangup = ((cd->flags.pbx_started == 0) &&
 			    (cd->flags.dir_outgoing == 0) &&
 			    (hangup_what & 1));
-    u_int8_t dir_outgoing = cd->flags.dir_outgoing;
+    uint8_t dir_outgoing = cd->flags.dir_outgoing;
 
     if (p_app == NULL) {
         /* should not happen */
@@ -1903,7 +1876,7 @@ cd_free(struct call_desc *cd, u_int8_t hangup_what)
 
     /* reset some variables to zero (all in one go) */
 
-    bzero(&cd->dummy_zero_start[0], 
+    memset(&cd->dummy_zero_start[0], 0,
 	  (&cd->dummy_zero_end[0] - &cd->dummy_zero_start[0]));
 
 
@@ -1983,7 +1956,7 @@ cd_free(struct call_desc *cd, u_int8_t hangup_what)
  * "cd_free()" when the call is complete.
  *---------------------------------------------------------------------------*/
 static struct call_desc *
-cd_alloc(struct cc_capi_application *p_app, u_int16_t plci)
+cd_alloc(struct cc_capi_application *p_app, uint16_t plci)
 {
     struct ast_channel *pbx_chan = NULL;
     struct call_desc *cd = NULL;
@@ -2183,11 +2156,11 @@ cd_alloc(struct cc_capi_application *p_app, u_int16_t plci)
  *
  * returns 0 on success
  *---------------------------------------------------------------------------*/
-static u_int8_t
+static uint8_t
 cd_set_cep(struct call_desc *cd, struct config_entry_iface *cep)
 {
     const struct cc_capi_options options_zero = { /* zero */ };
-    u_int8_t channel_type = ((cd->bchannelinfo[0] != '0') && 
+    uint8_t channel_type = ((cd->bchannelinfo[0] != '0') && 
 			     (cd->bchannelinfo[0] != 0)) ? 'D' : 'B';
 
     struct ast_channel *pbx_chan = cd->pbx_chan;
@@ -2265,9 +2238,9 @@ static void
 cd_detect_dtmf(struct call_desc *cd, int subclass, const void *__data, int len)
 {
     struct ast_frame temp_fr;
-    u_int8_t *input_data = (u_int8_t *)__data;
-    u_int16_t *short_data;
-    u_int16_t x;
+    uint8_t *input_data = (uint8_t *)__data;
+    uint16_t *short_data;
+    uint16_t x;
     int digit;
 
     /* convert all sound to short data */
@@ -2304,7 +2277,7 @@ cd_detect_dtmf(struct call_desc *cd, int subclass, const void *__data, int len)
 	break;
     }
 
-    bzero(&temp_fr, sizeof(temp_fr));
+    memset(&temp_fr, 0, sizeof(temp_fr));
 
     temp_fr.frametype = AST_FRAME_VOICE;
     temp_fr.subclass = AST_FORMAT_SLINEAR;
@@ -2316,7 +2289,7 @@ cd_detect_dtmf(struct call_desc *cd, int subclass, const void *__data, int len)
 
     if ((cd->last_dtmf_digit != digit) && digit) {
 
-        bzero(&temp_fr, sizeof(temp_fr));
+        memset(&temp_fr, 0, sizeof(temp_fr));
 
 	temp_fr.frametype = AST_FRAME_DTMF;
 	temp_fr.subclass = digit;
@@ -2345,14 +2318,14 @@ cd_detect_dtmf(struct call_desc *cd, int subclass, const void *__data, int len)
  * returns 0 on success
  *---------------------------------------------------------------------------*/
 static int
-cd_send_pbx_voice(struct call_desc *cd, const void *data_ptr, u_int32_t data_len)
+cd_send_pbx_voice(struct call_desc *cd, const void *data_ptr, uint32_t data_len)
 {
     struct ast_channel *pbx_chan = cd->pbx_chan;
     struct ast_frame temp_fr;
     struct ast_frame copy_fr;
     int len = 0;
 
-    bzero(&temp_fr, sizeof(temp_fr));
+    memset(&temp_fr, 0, sizeof(temp_fr));
 
     temp_fr.frametype = AST_FRAME_VOICE;
     temp_fr.subclass = cd->pbx_capability;
@@ -2361,7 +2334,7 @@ cd_send_pbx_voice(struct call_desc *cd, const void *data_ptr, u_int32_t data_len
     temp_fr.samples = data_len;
     temp_fr.offset = AST_FRIENDLY_OFFSET;
 
-    bcopy(&temp_fr, &copy_fr, sizeof(copy_fr));
+    memcpy(&copy_fr, &temp_fr, sizeof(copy_fr));
 
     cd_verbose(cd, 8, 1, 3, "temp_fr.datalen=%d, "
 	       "temp_fr.subclass=%d\n", temp_fr.datalen, 
@@ -2415,7 +2388,7 @@ cd_send_pbx_voice(struct call_desc *cd, const void *data_ptr, u_int32_t data_len
  *---------------------------------------------------------------------------*/
 static int 
 cd_send_pbx_frame(struct call_desc *cd, int frametype, int subclass, 
-		  const void *data, u_int16_t len)
+		  const void *data, uint16_t len)
 {
     struct ast_channel *pbx_chan = cd->pbx_chan;
     struct ast_frame temp_fr;
@@ -2430,7 +2403,7 @@ cd_send_pbx_frame(struct call_desc *cd, int frametype, int subclass,
         return -1;
     }
 
-    bzero(&temp_fr, sizeof(temp_fr));
+    memset(&temp_fr, 0, sizeof(temp_fr));
 
     temp_fr.frametype = frametype;
     temp_fr.subclass = subclass;
@@ -2441,8 +2414,8 @@ cd_send_pbx_frame(struct call_desc *cd, int frametype, int subclass,
 
 	if (temp_fr.data) {
 
-	    bcopy(data, ((u_int8_t *)temp_fr.data)+
-		  AST_FRIENDLY_OFFSET, len);
+	    memcpy(((uint8_t *)temp_fr.data) + AST_FRIENDLY_OFFSET,
+		   data, len);
 	    temp_fr.offset = AST_FRIENDLY_OFFSET;
 	    temp_fr.datalen = len;
 	    temp_fr.mallocd = AST_MALLOCD_DATA;
@@ -2469,7 +2442,7 @@ cd_send_pbx_frame(struct call_desc *cd, int frametype, int subclass,
  * returns 0 on success
  *---------------------------------------------------------------------------*/
 static int
-cd_handle_dst_telno(struct call_desc *cd, const u_int8_t *p_dst_telno)
+cd_handle_dst_telno(struct call_desc *cd, const uint8_t *p_dst_telno)
 {
     int error = 0;
 
@@ -2534,7 +2507,7 @@ cd_send_pbx_progress(struct call_desc *cd)
  * returns 0 on success
  *---------------------------------------------------------------------------*/
 static int
-cd_handle_progress_indicator(struct call_desc *cd, const u_int8_t prog_ind)
+cd_handle_progress_indicator(struct call_desc *cd, const uint8_t prog_ind)
 {
     switch(prog_ind) {
     case 0x01:
@@ -2570,7 +2543,7 @@ cd_handle_progress_indicator(struct call_desc *cd, const u_int8_t prog_ind)
 }
 
 static void
-cd_set_fax_config(struct call_desc *cd, u_int16_t fax_format, 
+cd_set_fax_config(struct call_desc *cd, uint16_t fax_format, 
 		  const char *stationid, const char *headline)
 {
 #if (CAPI_OS_HINT == 0)
@@ -2583,7 +2556,7 @@ cd_set_fax_config(struct call_desc *cd, u_int16_t fax_format,
 
 	cc_mutex_assert(&cd->p_app->lock, MA_OWNED);
 
-	bzero(&b3_conf, sizeof(b3_conf));
+	memset(&b3_conf, 0, sizeof(b3_conf));
 
 	CAPI_INIT(CAPI_B3_CONFIG_FAX_G3, &b3_conf);
 
@@ -2610,11 +2583,11 @@ cd_set_fax_config(struct call_desc *cd, u_int16_t fax_format,
  * NOTE: must be called with "p_app->lock" locked
  * NOTE: this function can sleep 
  *---------------------------------------------------------------------------*/
-static u_int16_t
+static uint16_t
 capi_check_wait_get_cmsg(struct cc_capi_application *p_app, _cmsg *CMSG)
 {
     struct timeval tv = { /* zero */ };
-    u_int16_t error;
+    uint16_t error;
 
     cc_mutex_assert(&p_app->lock, MA_OWNED);
 
@@ -2655,10 +2628,10 @@ capi_check_wait_get_cmsg(struct cc_capi_application *p_app, _cmsg *CMSG)
  *
  * NOTE: must be called with "p_app->lock" locked
  *---------------------------------------------------------------------------*/
-static u_int16_t 
+static uint16_t 
 __capi_put_cmsg(struct cc_capi_application *p_app, _cmsg *CMSG)
 {
-    u_int16_t error;
+    uint16_t error;
 
     cc_mutex_assert(&p_app->lock, MA_OWNED);
 
@@ -2666,9 +2639,9 @@ __capi_put_cmsg(struct cc_capi_application *p_app, _cmsg *CMSG)
 	
     if (error) {
         cc_log(LOG_ERROR, "CAPI error sending %s (NCCI=%#x) (error=%#x)\n",
-	       capi_cmsg2str(CMSG), (u_int32_t)HEADER_CID(CMSG), error);
+	       capi_cmsg2str(CMSG), (uint32_t)HEADER_CID(CMSG), error);
     } else {
-        u_int16_t wCmd = HEADER_CMD(CMSG);
+        uint16_t wCmd = HEADER_CMD(CMSG);
 	if ((wCmd == CAPI_P_REQ(DATA_B3)) ||
 	    (wCmd == CAPI_P_RESP(DATA_B3))) {
 	    cc_verbose(9, 1, "%s\n", capi_cmsg2str(CMSG));
@@ -2686,7 +2659,7 @@ static void *
 capi_do_monitor(void *data)
 {
     struct cc_capi_application *p_app = data;
-    u_int16_t error;
+    uint16_t error;
     _cmsg monCMSG;
 
     if (p_app == NULL) {
@@ -2729,12 +2702,12 @@ capi_do_monitor(void *data)
     return NULL;
 }
 
-static u_int16_t
+static uint16_t
 capi_send_listen_req(struct cc_capi_application *p_app, 
-		     u_int8_t controller, u_int32_t cip_mask)
+		     uint8_t controller, uint32_t cip_mask)
 {
-    u_int16_t error;
-    u_int16_t to = 0x80;
+    uint16_t error;
+    uint16_t to = 0x80;
     _cmsg     CMSG;
 
     cc_mutex_assert(&p_app->lock, MA_OWNED);
@@ -2763,9 +2736,9 @@ capi_send_listen_req(struct cc_capi_application *p_app,
     return error;
 }
 
-static u_int16_t
-capi_send_data_b3_req(struct call_desc *cd, u_int16_t wHandle,
-                      void *data, u_int16_t wLen)
+static uint16_t
+capi_send_data_b3_req(struct call_desc *cd, uint16_t wHandle,
+                      void *data, uint16_t wLen)
 {
     _cmsg CMSG;
 
@@ -2779,17 +2752,22 @@ capi_send_data_b3_req(struct call_desc *cd, u_int16_t wHandle,
     return __capi_put_cmsg(cd->p_app, &CMSG);
 }
 
-static u_int16_t
-capi_send_connect_resp(struct call_desc *cd, u_int16_t wReject, 
-		       const u_int16_t *p_bprot)
+static uint16_t
+capi_send_connect_resp(struct call_desc *cd, uint16_t wReject, 
+		       const uint16_t *p_bprot)
 {
     _cmsg CMSG;
     char buf[CAPI_MAX_STRING];
     const char *p_dst_telno;
-    struct tm tm;
     char tm_buf[7];
     int len = 0;
+#if (CC_AST_VERSION >= 0x10600)
+    struct ast_tm tm;
+    struct timeval t;
+#else
+    struct tm tm;
     time_t t;
+#endif
 
     if ((cd->state != CAPI_STATE_ALERTING) &&
 	(cd->state != CAPI_STATE_DID) &&
@@ -2849,7 +2827,11 @@ capi_send_connect_resp(struct call_desc *cd, u_int16_t wReject,
 	    /* provide the time to 
 	     * connected equipment:
 	     */
+#if (CC_AST_VERSION >= 0x10600)
+	    microtime(&t);
+#else
 	    t = time(NULL);
+#endif
 
 #if (CC_AST_VERSION >= 0x10408)
 	    if (ast_localtime(&t, &tm, NULL)) {
@@ -2880,7 +2862,7 @@ capi_send_connect_resp(struct call_desc *cd, u_int16_t wReject,
     return __capi_put_cmsg(cd->p_app, &CMSG);
 }
 
-static u_int16_t
+static uint16_t
 capi_send_connect_resp_app(struct cc_capi_application *p_app, 
 			   uint16_t wMsgNum, uint16_t plci, 
 			   uint16_t wReject)
@@ -2892,7 +2874,7 @@ capi_send_connect_resp_app(struct cc_capi_application *p_app,
     return __capi_put_cmsg(p_app, &CMSG);
 }
 
-static u_int16_t
+static uint16_t
 capi_send_disconnect_req(struct call_desc *cd)
 {
     _cmsg CMSG;
@@ -2905,7 +2887,7 @@ capi_send_disconnect_req(struct call_desc *cd)
     return __capi_put_cmsg(cd->p_app, &CMSG);
 }
 
-static u_int16_t
+static uint16_t
 capi_send_connect_b3_req(struct call_desc *cd)
 {
     _cmsg CMSG;
@@ -2925,9 +2907,9 @@ capi_send_connect_b3_req(struct call_desc *cd)
     return __capi_put_cmsg(cd->p_app, &CMSG);
 }
 
-static u_int16_t
+static uint16_t
 capi_send_info_digits(struct call_desc *cd, const char *digits, 
-		      u_int16_t len)
+		      uint16_t len)
 {
     _cmsg CMSG;
     char buf[32];
@@ -2952,9 +2934,9 @@ capi_send_info_digits(struct call_desc *cd, const char *digits,
     return __capi_put_cmsg(cd->p_app, &CMSG);
 }
 
-static u_int16_t
+static uint16_t
 capi_send_inband_digits(struct call_desc *cd, const char *digits, 
-			u_int16_t len)
+			uint16_t len)
 {
     _cmsg CMSG;
     char buf[32];
@@ -2984,8 +2966,8 @@ capi_send_inband_digits(struct call_desc *cd, const char *digits,
     return __capi_put_cmsg(cd->p_app, &CMSG);
 }
 
-static u_int16_t
-capi_send_alert_req(struct call_desc *cd, u_int8_t flag)
+static uint16_t
+capi_send_alert_req(struct call_desc *cd, uint8_t flag)
 {
     _cmsg CMSG;
 
@@ -3024,7 +3006,7 @@ capi_send_alert_req(struct call_desc *cd, u_int8_t flag)
     return __capi_put_cmsg(cd->p_app, &CMSG);
 }
 
-static u_int16_t
+static uint16_t
 capi_send_ect_req(struct call_desc *cd)
 {
     _cmsg CMSG;
@@ -3044,7 +3026,7 @@ capi_send_ect_req(struct call_desc *cd)
     return __capi_put_cmsg(cd->p_app, &CMSG);
 }
 
-static u_int16_t
+static uint16_t
 capi_send_disconnect_b3_req(struct call_desc *cd)
 {
     _cmsg CMSG;
@@ -3055,8 +3037,8 @@ capi_send_disconnect_b3_req(struct call_desc *cd)
     return __capi_put_cmsg(cd->p_app, &CMSG);
 }
 
-static u_int16_t
-capi_send_fac_suppl_req(struct call_desc *cd, u_int16_t wFunction)
+static uint16_t
+capi_send_fac_suppl_req(struct call_desc *cd, uint16_t wFunction)
 {
     _cmsg CMSG;
     char fac[4];
@@ -3088,8 +3070,8 @@ capi_send_fac_suppl_req(struct call_desc *cd, u_int16_t wFunction)
 #define EC_OPTION_DISABLE_G164_OR_G165  ((1<<1) | (1<<2))
 #define EC_DEFAULT_TAIL                 64
 
-static u_int16_t
-capi_send_echo_cancel_req(struct call_desc *cd, u_int16_t function)
+static uint16_t
+capi_send_echo_cancel_req(struct call_desc *cd, uint16_t function)
 {
     _cmsg CMSG;
     char buf[10];
@@ -3107,7 +3089,7 @@ capi_send_echo_cancel_req(struct call_desc *cd, u_int16_t function)
 	       function, cd->options.echo_cancel_option,
 	       cd->options.echo_cancel_tail);
 
-    bzero(buf, sizeof(buf));
+    memset(buf, 0, sizeof(buf));
 
     buf[0] = 9; /* msg size */
 
@@ -3137,8 +3119,8 @@ capi_send_echo_cancel_req(struct call_desc *cd, u_int16_t function)
     return __capi_put_cmsg(cd->p_app, &CMSG);
 }
 
-static u_int16_t
-capi_send_detect_dtmf_req(struct call_desc *cd, u_int8_t flag)
+static uint16_t
+capi_send_detect_dtmf_req(struct call_desc *cd, uint8_t flag)
 {
     _cmsg CMSG;
     char buf[9];
@@ -3154,7 +3136,7 @@ capi_send_detect_dtmf_req(struct call_desc *cd, u_int8_t flag)
 	
     if (cd->support.dtmf && (!(cd->options.dtmf_detect_in_software))) {
 
-        bzero(buf, sizeof(buf));
+        memset(buf, 0, sizeof(buf));
 
 	buf[0] = 8; /* msg length */
 
@@ -3181,9 +3163,9 @@ capi_send_detect_dtmf_req(struct call_desc *cd, u_int8_t flag)
     return 0;
 }
 
-static u_int16_t
+static uint16_t
 capi_send_line_interconnect_req(struct call_desc *cd0, 
-				struct call_desc *cd1, u_int8_t start)
+				struct call_desc *cd1, uint8_t start)
 {
     _cmsg CMSG;
     char buf[20];
@@ -3209,7 +3191,7 @@ capi_send_line_interconnect_req(struct call_desc *cd0,
 	return 0x2001; /* message not allowed yet */
     }
 
-    bzero(buf, sizeof(buf));
+    memset(buf, 0, sizeof(buf));
 
     if (start) {
         /* connect */
@@ -3248,7 +3230,7 @@ capi_send_line_interconnect_req(struct call_desc *cd0,
     return __capi_put_cmsg(cd0->p_app, &CMSG);
 }
 
-static u_int16_t
+static uint16_t
 capi_send_select_fax_prot_req(struct call_desc *cd) 
 {
     _cmsg CMSG;
@@ -3281,8 +3263,8 @@ capi_send_select_fax_prot_req(struct call_desc *cd)
  *  TCAP -> CIP Translation Table (TransferCapability->CommonIsdnProfile)
  */
 static const struct {
-	u_int16_t tcap;
-	u_int16_t cip;
+	uint16_t tcap;
+	uint16_t cip;
 } translate_tcap2cip[] = {
 	{ PRI_TRANS_CAP_SPEECH,                 CAPI_CIPI_SPEECH },
 	{ PRI_TRANS_CAP_DIGITAL,                CAPI_CIPI_DIGITAL },
@@ -3293,7 +3275,7 @@ static const struct {
 };
 
 static int
-tcap2cip(u_int16_t tcap)
+tcap2cip(uint16_t tcap)
 {
 	int x;
 	
@@ -3308,8 +3290,8 @@ tcap2cip(u_int16_t tcap)
  *  CIP -> TCAP Translation Table (CommonIsdnProfile->TransferCapability)
  */
 static const struct {
-	u_int16_t cip;
-	u_int16_t tcap;
+	uint16_t cip;
+	uint16_t tcap;
 } translate_cip2tcap[] = {
 	{ CAPI_CIPI_SPEECH,                  PRI_TRANS_CAP_SPEECH },
 	{ CAPI_CIPI_DIGITAL,                 PRI_TRANS_CAP_DIGITAL },
@@ -3335,13 +3317,13 @@ static const struct {
 	{ CAPI_CIPI_VIDEO_TELEPHONY_C2,      PRI_TRANS_CAP_DIGITAL }
 };
 
-static u_int16_t 
+static uint16_t 
 cip2tcap(int cip)
 {
 	int x;
 	
 	for (x = 0;x < sizeof(translate_cip2tcap) / sizeof(translate_cip2tcap[0]); x++) {
-		if (translate_cip2tcap[x].cip == (u_int16_t)cip)
+		if (translate_cip2tcap[x].cip == (uint16_t)cip)
 			return translate_cip2tcap[x].tcap;
 	}
 	return 0;
@@ -3385,7 +3367,7 @@ parse_dialstring(char *buffer, const char **interface, const char **dest,
 {
 	char *ptr = buffer;
 	char *oc;
-	u_int8_t cp = 0;
+	uint8_t cp = 0;
 
 	/* interface is the first part of the string */
 	*interface = buffer;
@@ -3450,8 +3432,8 @@ chan_capi_request(const char *type, const struct ast_codec_pref *formats,
 	const char *param;
 	const char *ocid;
 	char buffer[CAPI_MAX_STRING];
-	u_int32_t capigroup = 0;
-	u_int8_t controller = 0xFF;
+	uint32_t capigroup = 0;
+	uint8_t controller = 0xFF;
 	struct config_entry_iface *cep;
 	struct cc_capi_application *p_app = capi_application[0]; /* default */
 
@@ -3589,8 +3571,8 @@ chan_capi_request(const char *type, const struct ast_codec_pref *formats,
 static int
 chan_capi_call_sub(struct call_desc *cd, const char *idest, int timeout)
 {
-	static u_int8_t bc_bprot_alaw[] = { 0x05, 0x04, 0x03, 0x80, 0x90, 0xA3 };
-	static u_int8_t bc_bprot_ulaw[] = { 0x05, 0x04, 0x03, 0x80, 0x90, 0xA2 };
+	static uint8_t bc_bprot_alaw[] = { 0x05, 0x04, 0x03, 0x80, 0x90, 0xA3 };
+	static uint8_t bc_bprot_ulaw[] = { 0x05, 0x04, 0x03, 0x80, 0x90, 0xA2 };
 
 	_cmsg CMSG;
 	const char *dest;
@@ -3611,12 +3593,12 @@ chan_capi_call_sub(struct call_desc *cd, const char *idest, int timeout)
 	char display[AST_MAX_EXTENSION];
 #endif
 	char useruser[AST_MAX_EXTENSION];
-	u_int8_t buffer[8];
-	u_int8_t bchaninfo[4];
-	u_int8_t CLIR = 0;
-	u_int8_t callernplan = 0;
-	u_int8_t use_dst_default = 0;
-	u_int8_t sending_complete = 1; /* default */
+	uint8_t buffer[8];
+	uint8_t bchaninfo[4];
+	uint8_t CLIR = 0;
+	uint8_t callernplan = 0;
+	uint8_t use_dst_default = 0;
+	uint8_t sending_complete = 1; /* default */
 
 	strlcpy(dstring, idest, sizeof(dstring));
 	parse_dialstring(dstring, &interface, &dest, &param, &ocid);
@@ -3929,7 +3911,7 @@ chan_capi_bridge_sub(struct call_desc *cd0,
 	CC_BRIDGE_RETURN ret = AST_BRIDGE_COMPLETE;
 	struct ast_channel *pbx_chan0 = cd0->pbx_chan;
 	struct ast_channel *pbx_chan1 = cd1->pbx_chan;
-	u_int16_t waitcount = 20;
+	uint16_t waitcount = 20;
 
 	cd_verbose(cd0, 3, 1, 2, "Native bridge!\n");
 	cd_verbose(cd1, 3, 1, 2, "Native bridge!\n");
@@ -4066,7 +4048,7 @@ chan_capi_bridge_sub(struct call_desc *cd0,
 static int
 chan_capi_answer_sub(struct call_desc *cd)
 {
-	static const u_int16_t bprot[3] = { 1, 1, 0 };
+	static const uint16_t bprot[3] = { 1, 1, 0 };
 	const char *temp;
 	int error = 0;
 
@@ -4245,7 +4227,7 @@ chan_capi_write_sub(struct call_desc *cd, struct ast_frame *frame)
 static int
 chan_capi_send_digit_sub(struct call_desc *cd, const char digit)
 {
-	u_int8_t buf[16];
+	uint8_t buf[16];
 
 	buf[0] = digit;
 	buf[1] = 0;
@@ -4638,8 +4620,8 @@ capi_handle_dtmf_fax(struct call_desc *cd)
 /*
  * send control according to cause code
  */
-static u_int16_t
-cd_send_pbx_cause_control(struct call_desc *cd, u_int8_t control)
+static uint16_t
+cd_send_pbx_cause_control(struct call_desc *cd, uint8_t control)
 {
 	int cause = cd->pbx_chan->hangupcause;
 
@@ -4712,10 +4694,10 @@ capi_handle_info_indication(_cmsg *CMSG, struct call_desc **pp_cd)
 	struct call_desc *cd = *pp_cd;
 	const char *desc = NULL;
 
-	u_int8_t exten_buf[AST_MAX_EXTENSION];
-	u_int8_t reason_buf[16];
-	u_int8_t ie_buf[8];
-	u_int8_t x;
+	uint8_t exten_buf[AST_MAX_EXTENSION];
+	uint8_t reason_buf[16];
+	uint8_t ie_buf[8];
+	uint8_t x;
 	_cmsg CMSG2;
 
 	INFO_RESP_HEADER(&CMSG2, cd->p_app->application_id, 
@@ -4981,9 +4963,9 @@ capi_handle_facility_indication(_cmsg *CMSG, struct call_desc **pp_cd)
 	struct call_desc *cd = *pp_cd;
 	_cmsg CMSG2;
 	const void *parm;
-	u_int16_t temp;
-	u_int16_t reason = 0xFFFF;
-	u_int8_t dtmf;
+	uint16_t temp;
+	uint16_t reason = 0xFFFF;
+	uint8_t dtmf;
 
 	FACILITY_RESP_HEADER(&CMSG2, cd->p_app->application_id, 
 			     HEADER_MSGNUM(CMSG), cd->msg_plci);
@@ -5091,10 +5073,10 @@ capi_handle_facility_indication(_cmsg *CMSG, struct call_desc **pp_cd)
 }
 
 static void
-capi_detect_silence(struct call_desc *cd, u_int8_t *ptr, u_int16_t len)
+capi_detect_silence(struct call_desc *cd, uint8_t *ptr, uint16_t len)
 {
     int32_t pbx_capability = cd->pbx_capability;
-    u_int8_t silence;
+    uint8_t silence;
     int16_t temp;
 
     if((cd->flags.dir_outgoing == 0) ||
@@ -5155,8 +5137,8 @@ capi_handle_data_b3_indication(_cmsg *CMSG, struct call_desc **pp_cd)
 {
 	struct call_desc *cd = *pp_cd;
 	_cmsg CMSG2;
-	u_int8_t *ptr_curr;
-	u_int16_t len_curr;
+	uint8_t *ptr_curr;
+	uint16_t len_curr;
 
 	cd->rx_buffer_handle++;
 	if (cd->rx_buffer_handle >= CAPI_MAX_B3_BLOCKS) {
@@ -5174,7 +5156,7 @@ capi_handle_data_b3_indication(_cmsg *CMSG, struct call_desc **pp_cd)
 
 	cd->rx_buffer_len[cd->rx_buffer_handle] =  len_curr;
 
-	bcopy(DATA_B3_IND_DATA(CMSG), ptr_curr, len_curr);
+	memcpy(ptr_curr, DATA_B3_IND_DATA(CMSG), len_curr);
 
 	/* send a DATA_B3_RESP very quickly to free the buffer in capi */
 	DATA_B3_RESP_HEADER(&CMSG2, cd->p_app->application_id, 
@@ -5215,10 +5197,10 @@ capi_handle_data_b3_indication(_cmsg *CMSG, struct call_desc **pp_cd)
  * CAPI DATA_B3_CONF
  */
 static void
-capi_handle_data_b3_confirmation(struct call_desc *cd, u_int16_t wInfo)
+capi_handle_data_b3_confirmation(struct call_desc *cd, uint16_t wInfo)
 {
 	void *ptr;
-	u_int16_t len;
+	uint16_t len;
 
 	if (cd->flags.fax_receiving || 
 	    cd->flags.fax_pending) {
@@ -5304,7 +5286,7 @@ static void
 capi_handle_connect_b3_active_indication(_cmsg *CMSG, struct call_desc **pp_cd)
 {
 	struct call_desc *cd = *pp_cd;
-	u_int8_t temp;
+	uint8_t temp;
 	_cmsg CMSG2;
 
 	/* then send a CONNECT_B3_ACTIVE_RESP */
@@ -5352,7 +5334,7 @@ capi_handle_connect_b3_active_indication(_cmsg *CMSG, struct call_desc **pp_cd)
 static void
 capi_handle_disconnect_b3_indication(_cmsg *CMSG, struct call_desc **pp_cd)
 {
-	const u_int8_t *ncpi = (const u_int8_t *)DISCONNECT_B3_IND_NCPI(CMSG);
+	const uint8_t *ncpi = (const uint8_t *)DISCONNECT_B3_IND_NCPI(CMSG);
 	struct call_desc *cd = *pp_cd;
 	char buffer[CAPI_MAX_STRING];
 	_cmsg CMSG2;
@@ -5466,9 +5448,9 @@ static void
 search_cep(struct call_desc *cd)
 {
 	char buffer[CAPI_MAX_STRING];
-	u_int16_t strip_len;
-	u_int8_t  match;
-	u_int8_t  controller;
+	uint16_t strip_len;
+	uint8_t  match;
+	uint8_t  controller;
 	const char *ptr;
 	const char *msn;
 	      char *buffer_pp;
@@ -5687,7 +5669,7 @@ capi_handle_connect_indication(_cmsg *CMSG, struct call_desc **pp_cd)
 {
 	struct call_desc *cd = *pp_cd;
 	struct ast_channel *pbx_chan = cd->pbx_chan;
-	u_int8_t start_immediate;
+	uint8_t start_immediate;
 	char buffer[AST_MAX_EXTENSION];
 
 	cd->bchannelinfo[0] = 
@@ -5804,10 +5786,10 @@ capi_handle_facility_confirmation_app(_cmsg *CMSG,
 				      struct cc_capi_application *p_app)
 {
 	const void *param = FACILITY_CONF_FACILITYCONFIRMATIONPARAMETER(CMSG);
-	u_int16_t wSelector = FACILITY_CONF_FACILITYSELECTOR(CMSG);
+	uint16_t wSelector = FACILITY_CONF_FACILITYSELECTOR(CMSG);
 	struct cc_capi_controller *p_ctrl = p_app->temp_p_ctrl;
-	u_int16_t wFunction;
-	u_int32_t dwServices;
+	uint16_t wFunction;
+	uint32_t dwServices;
 
 	if (p_ctrl == NULL) {
 	    return;
@@ -5881,9 +5863,9 @@ static void
 capi_handle_facility_confirmation_cd(_cmsg *CMSG, struct call_desc **pp_cd)
 {
 	struct call_desc *cd = *pp_cd;
-	u_int16_t wSelector = FACILITY_CONF_FACILITYSELECTOR(CMSG);
+	uint16_t wSelector = FACILITY_CONF_FACILITYSELECTOR(CMSG);
 	const void *parm = FACILITY_CONF_FACILITYCONFIRMATIONPARAMETER(CMSG);
-	u_int16_t wTemp;
+	uint16_t wTemp;
 
 	if (wSelector == FACILITYSELECTOR_DTMF) {
 		cd_verbose(cd, 2, 1, 4, "DTMF CONF\n");
@@ -5946,11 +5928,11 @@ capi_handle_facility_confirmation_cd(_cmsg *CMSG, struct call_desc **pp_cd)
 static void
 capi_handle_cmsg(struct cc_capi_application *p_app, _cmsg *CMSG)
 {
-	u_int32_t NCCI = HEADER_CID(CMSG);
-	u_int32_t PLCI = (NCCI & 0xffff);
-	u_int16_t wCmd = HEADER_CMD(CMSG);
-	u_int16_t wMsgNum = HEADER_MSGNUM(CMSG);
-	u_int16_t wInfo = 0xffff;
+	uint32_t NCCI = HEADER_CID(CMSG);
+	uint32_t PLCI = (NCCI & 0xffff);
+	uint16_t wCmd = HEADER_CMD(CMSG);
+	uint16_t wMsgNum = HEADER_MSGNUM(CMSG);
+	uint16_t wInfo = 0xffff;
 	struct call_desc *cd;
 
 	if ((wCmd == CAPI_P_IND(DATA_B3)) ||
@@ -6166,7 +6148,7 @@ capi_handle_cmsg(struct cc_capi_application *p_app, _cmsg *CMSG)
  *
  * param: not used
  *---------------------------------------------------------------------------*/
-static u_int16_t
+static uint16_t
 chan_capi_cmd_progress(struct call_desc *cd, struct call_desc *cd_unused, 
 		       char *param)
 {
@@ -6222,12 +6204,12 @@ chan_capi_cmd_progress(struct call_desc *cd, struct call_desc *cd_unused,
  *
  * param: deflect telephone number
  *---------------------------------------------------------------------------*/
-static u_int16_t
+static uint16_t
 chan_capi_cmd_call_deflect(struct call_desc *cd, struct call_desc *cd_unknown,
 			   char *param)
 {
 	int param_len = strlen(param);
-	u_int8_t fac[64];
+	uint8_t fac[64];
 	_cmsg CMSG;
 
 	cc_mutex_assert(&cd->p_app->lock, MA_OWNED);
@@ -6271,7 +6253,7 @@ chan_capi_cmd_call_deflect(struct call_desc *cd, struct call_desc *cd_unknown,
 	fac[9] = 0x80; /* presentation allowed */
 	fac[10+param_len] = 0x00; /* empty subaddress */
 
-	bcopy(param, fac+10, param_len);
+	memcpy(fac+10, param, param_len);
 
 	FACILITY_REQ_HEADER(&CMSG, cd->p_app->application_id, 
 			    get_msg_num_other(cd->p_app), cd->msg_plci);
@@ -6288,16 +6270,16 @@ chan_capi_cmd_call_deflect(struct call_desc *cd, struct call_desc *cd_unknown,
  *
  * param: FAX receive filename
  *---------------------------------------------------------------------------*/
-static u_int16_t
+static uint16_t
 chan_capi_cmd_receive_fax(struct call_desc *cd, struct call_desc *cd_unused, 
 			  char *param)
 {
-	static const u_int16_t bprot[3] = { 4, 4, 4 };
+	static const uint16_t bprot[3] = { 4, 4, 4 };
 
 	const char *filename;
 	const char *stationid;
 	const char *headline;
-	u_int16_t error = 0;
+	uint16_t error = 0;
 
 	filename = strsep(&param, "|");
 	stationid = strsep(&param, "|");
@@ -6381,7 +6363,7 @@ chan_capi_cmd_receive_fax(struct call_desc *cd, struct call_desc *cd_unused,
  *
  * param: not used
  *---------------------------------------------------------------------------*/
-static u_int16_t
+static uint16_t
 chan_capi_cmd_malicious(struct call_desc *cd, struct call_desc *cd_unknown,
 			char *param)
 {
@@ -6405,7 +6387,7 @@ chan_capi_cmd_malicious(struct call_desc *cd, struct call_desc *cd_unknown,
  *
  * param: not used
  *---------------------------------------------------------------------------*/
-static u_int16_t
+static uint16_t
 chan_capi_cmd_hold(struct call_desc *cd, struct call_desc *cd_unknown, 
 		   char *param)
 {
@@ -6449,7 +6431,7 @@ chan_capi_cmd_hold(struct call_desc *cd, struct call_desc *cd_unknown,
  *
  * param: hold type
  *---------------------------------------------------------------------------*/
-static u_int16_t
+static uint16_t
 chan_capi_cmd_holdtype(struct call_desc *cd, struct call_desc *cd_unknown, 
 		       char *param)
 {
@@ -6476,7 +6458,7 @@ chan_capi_cmd_holdtype(struct call_desc *cd, struct call_desc *cd_unknown,
  *
  * param: not used
  *---------------------------------------------------------------------------*/
-static u_int16_t
+static uint16_t
 chan_capi_cmd_retrieve(struct call_desc *cd, struct call_desc *cd_unknown,
 		       char *param)
 {
@@ -6521,7 +6503,7 @@ chan_capi_cmd_retrieve(struct call_desc *cd, struct call_desc *cd_unknown,
  *
  * param: second call descriptor indentifier
  *---------------------------------------------------------------------------*/
-static u_int16_t
+static uint16_t
 chan_capi_cmd_ect(struct call_desc *cd0, struct call_desc *cd1, 
 		  char *param)
 {
@@ -6590,10 +6572,10 @@ chan_capi_cmd_ect(struct call_desc *cd0, struct call_desc *cd1,
 
 struct chan_capi_command_entry {
 	const char *cmd_name;
-	u_int16_t (*cmd_func)(struct call_desc *, struct call_desc *, char *);
-	u_int32_t capi_only : 1;
-	u_int32_t arg_is_plci : 1;
-	u_int32_t arg_is_non_zero : 1;
+	uint16_t (*cmd_func)(struct call_desc *, struct call_desc *, char *);
+	uint32_t capi_only : 1;
+	uint32_t arg_is_plci : 1;
+	uint32_t arg_is_non_zero : 1;
 };
 
 static const struct chan_capi_command_entry
@@ -6684,7 +6666,7 @@ chan_capi_command_exec(struct ast_channel *chan, void *data)
 
 	if (capicmd->arg_is_plci) {
 
-	    u_int16_t plci = strtoul(params, NULL, 0) & 0xFFFF;
+	    uint16_t plci = strtoul(params, NULL, 0) & 0xFFFF;
 
 	    chan_second = pbx_chan_by_plci_on_hold(plci);
 	}
@@ -6751,9 +6733,9 @@ do_periodic(void *data)
 	struct cc_capi_application *p_app;
 	struct ast_channel *pbx_chan;
 	struct call_desc *cd;
-	u_int32_t temp;
-	u_int32_t limit;
-	u_int16_t x;
+	uint32_t temp;
+	uint32_t limit;
+	uint16_t x;
 
 	while (1) {
 	  
@@ -6908,11 +6890,11 @@ do_periodic(void *data)
 static void
 capi_get_supported_sservices(struct cc_capi_application *p_app, 
 			     struct cc_capi_controller *p_ctrl,
-			     const u_int16_t controller_unit)
+			     const uint16_t controller_unit)
 {
 	_cmsg CMSG;
-	u_int16_t to = 0x80;
-	static const u_int8_t fac_struct[4] = { 3, 0, 0, 0 };
+	uint16_t to = 0x80;
+	static const uint8_t fac_struct[4] = { 3, 0, 0, 0 };
 
 	FACILITY_REQ_HEADER(&CMSG, p_app->application_id, 
 			    get_msg_num_other(p_app), controller_unit);
@@ -6943,20 +6925,37 @@ capi_get_supported_sservices(struct cc_capi_application *p_app,
 
 /* reload "capi.conf" */
 
+#if (CC_AST_VERSION >= 0x10600)
+static char *
+chan_capi_reload(struct ast_cli_entry *e, int cmd, struct ast_cli_args *a)
+#else
 static int
 chan_capi_reload(int fd, int argc, char *argv[])
+#endif
 {
-    u_int16_t error = 0;
+#if (CC_AST_VERSION >= 0x10600)
+    int fd = a->fd;
+    int argc = a->argc;
+#endif
+    uint16_t error = 0;
     struct cc_capi_application *p_app = NULL;
     struct ast_config * cfg = NULL;
 
     if (argc != 2) {
+#if (CC_AST_VERSION >= 0x10600)
+        return CLI_SHOWUSAGE;
+#else
         return RESULT_SHOWUSAGE;
+#endif
     }
 		
     /* load configuration file */
 
+#if (CC_AST_VERSION >= 0x10600)
+    cfg = ast_config_load((char *)config_file, (struct ast_flags){ 0 });
+#else
     cfg = ast_config_load((char *)config_file);
+#endif
 
     if (!cfg) {
         if (fd >= 0) {
@@ -7009,15 +7008,29 @@ chan_capi_reload(int fd, int argc, char *argv[])
 
 /* return information about a specific CAPI channel to the PBX */
 
+#if (CC_AST_VERSION >= 0x10600)
+static char *
+chan_capi_get_channel_info(struct ast_cli_entry *e, int cmd, struct ast_cli_args *a)
+#else
 static int
 chan_capi_get_channel_info(int fd, int argc, char *argv[]) 
+#endif
 {
+#if (CC_AST_VERSION >= 0x10600)
+    int fd = a->fd;
+    int argc = a->argc;
+    char **argv = a->argv;
+#endif
     struct call_desc *cd;
     struct cc_capi_application *p_app = capi_application[0];
     uint16_t plci;
 
     if ((argc != 4) || (argv[3] == NULL)) {
+#if (CC_AST_VERSION >= 0x10600)
+        return CLI_SHOWUSAGE;
+#else
         return RESULT_SHOWUSAGE;
+#endif
     }
 
     if (p_app == NULL) {
@@ -7061,19 +7074,32 @@ chan_capi_get_channel_info(int fd, int argc, char *argv[])
 
 /* return information about "chan_capi" to the PBX */
 
+#if (CC_AST_VERSION >= 0x10600)
+static char *
+chan_capi_get_info(struct ast_cli_entry *e, int cmd, struct ast_cli_args *a)
+#else
 static int
 chan_capi_get_info(int fd, int argc, char *argv[])
+#endif
 {
+#if (CC_AST_VERSION >= 0x10600)
+    int fd = a->fd;
+    int argc = a->argc;
+#endif
     struct cc_capi_application *p_app;
     struct config_entry_iface *cep;
     struct call_desc *cd;
-    u_int16_t use_count_total[CAPI_MAX_CONTROLLERS] = { /* zero */ };
-    u_int16_t use_count_on_hold[CAPI_MAX_CONTROLLERS] = { /* zero */ };
-    u_int16_t n;
-    u_int16_t x;
+    uint16_t use_count_total[CAPI_MAX_CONTROLLERS] = { /* zero */ };
+    uint16_t use_count_on_hold[CAPI_MAX_CONTROLLERS] = { /* zero */ };
+    uint16_t n;
+    uint16_t x;
 
     if ((argc != 2) && (argc != 3)) {
+#if (CC_AST_VERSION >= 0x10600)
+        return CLI_SHOWUSAGE;
+#else
         return RESULT_SHOWUSAGE;
+#endif
     }
 		
     for (n = 0; n < CAPI_MAX_APPLICATIONS; n++) {
@@ -7183,12 +7209,25 @@ chan_capi_get_info(int fd, int argc, char *argv[])
 }
 
 /* enable "chan_capi" debugging */
-
+#if (CC_AST_VERSION >= 0x10600)
+static char *
+chan_capi_enable_debug(struct ast_cli_entry *e, int cmd, struct ast_cli_args *a)
+#else
 static int
 chan_capi_enable_debug(int fd, int argc, char *argv[])
+#endif
 {
+#if (CC_AST_VERSION >= 0x10600)
+    int fd = a->fd;
+    int argc = a->argc;
+#endif
+
     if (argc != 2) {
+#if (CC_AST_VERSION >= 0x10600)
+        return CLI_SHOWUSAGE;
+#else
         return RESULT_SHOWUSAGE;
+#endif
     }
 		
     capi_global.debug = 1;
@@ -7199,12 +7238,25 @@ chan_capi_enable_debug(int fd, int argc, char *argv[])
 }
 
 /* disable "chan_capi" debugging */
-
+#if (CC_AST_VERSION >= 0x10600)
+static char *
+chan_capi_disable_debug(struct ast_cli_entry *e, int cmd, struct ast_cli_args *a)
+#else
 static int
 chan_capi_disable_debug(int fd, int argc, char *argv[])
+#endif
 {
+#if (CC_AST_VERSION >= 0x10600)
+    int fd = a->fd;
+    int argc = a->argc;
+#endif
+
     if (argc != 3) {
+#if (CC_AST_VERSION >= 0x10600)
+        return CLI_SHOWUSAGE;
+#else
         return RESULT_SHOWUSAGE;
+#endif
     }
 
     capi_global.debug = 0;
@@ -7217,40 +7269,59 @@ chan_capi_disable_debug(int fd, int argc, char *argv[])
 /*
  * define "chan_capi" commands
  */
+
+#if (CC_AST_VERSION >= 0x10600)
+#define I_CMDS .cmda = 
+#define I_FUNC .handler = 
+#define I_SUMMARY .summary = 
+#define I_USAGE .usage = 
+#else
+#define I_CMDS 
+#define I_FUNC 
+#define I_SUMMARY 
+#define I_USAGE
+#endif
+
 static struct ast_cli_entry  cli_reload =
-	{ { "capi", "reload", NULL }, chan_capi_reload,
-	  "Reload CAPI configuration",
-	  "Usage: capi reload\n"
+	{ I_CMDS { "capi", "reload", NULL },
+	  I_FUNC chan_capi_reload,
+	  I_SUMMARY "Reload CAPI configuration",
+	  I_USAGE "Usage: capi reload\n"
 	  "       Reload and merge new configuration with existing.\n" };
 
 static struct ast_cli_entry  cli_info =
-	{ { "capi", "info", NULL }, chan_capi_get_info, 
-	  "Show CAPI info",
-	  "Usage: capi info\n"
+	{ I_CMDS { "capi", "info", NULL },
+	  I_FUNC chan_capi_get_info, 
+	  I_SUMMARY "Show CAPI info",
+	  I_USAGE "Usage: capi info\n"
 	  "       Show info about B channels.\n" };
 
 static struct ast_cli_entry  cli_show_channel =
-	{ { "capi", "show", "channel", NULL }, chan_capi_get_channel_info, 
-	  "Show information about an active CAPI channel",
-	  "Usage: capi show channel <id>\n"
+	{ I_CMDS { "capi", "show", "channel", NULL },
+	  I_FUNC chan_capi_get_channel_info, 
+	  I_SUMMARY "Show information about an active CAPI channel",
+	  I_USAGE "Usage: capi show channel <id>\n"
 	  "       Show info about a channel given by ID.\n" };
 
 static struct ast_cli_entry  cli_show_channels =
-	{ { "capi", "show", "channels", NULL }, chan_capi_get_info, 
-	  "Show active CAPI channels",
-	  "Usage: capi show channels\n"
+	{ I_CMDS { "capi", "show", "channels", NULL },
+	  I_FUNC chan_capi_get_info, 
+	  I_SUMMARY "Show active CAPI channels",
+	  I_USAGE "Usage: capi show channels\n"
 	  "       Show info about B channels.\n" };
 
 static struct ast_cli_entry  cli_debug =
-	{ { "capi", "debug", NULL }, chan_capi_enable_debug, 
-	  "Enable CAPI debugging",
-	  "Usage: capi debug\n"
+	{ I_CMDS { "capi", "debug", NULL },
+	  I_FUNC chan_capi_enable_debug, 
+	  I_SUMMARY "Enable CAPI debugging",
+	  I_USAGE "Usage: capi debug\n"
 	  "       Enables dumping of CAPI packets for debugging purposes\n" };
 
 static struct ast_cli_entry  cli_no_debug =
-	{ { "capi", "no", "debug", NULL }, chan_capi_disable_debug, 
-	  "Disable CAPI debugging", 
-	  "Usage: capi no debug\n"
+	{ I_CMDS { "capi", "no", "debug", NULL },
+	  I_FUNC chan_capi_disable_debug, 
+	  I_SUMMARY "Disable CAPI debugging", 
+	  I_USAGE "Usage: capi no debug\n"
 	  "       Disables dumping of CAPI packets for debugging purposes\n" };
 
 #ifdef CC_AST_HAVE_TECH_PVT
@@ -7299,14 +7370,14 @@ chan_capi_fill_pvt(struct ast_channel *pbx_chan)
 
 /* fill controller information */
 
-static u_int16_t
+static uint16_t
 chan_capi_fill_controller_info(struct cc_capi_application *p_app,
-			       const u_int16_t controller_unit)
+			       const uint16_t controller_unit)
 {
 	struct cc_capi_profile profile;
 	struct cc_capi_controller ctrl_temp;
 
-	u_int16_t error;
+	uint16_t error;
 
 	if (p_app == NULL) {
 	    /* no application, nothing to do */
@@ -7315,16 +7386,16 @@ chan_capi_fill_controller_info(struct cc_capi_application *p_app,
 
 	cc_mutex_assert(&p_app->lock, MA_OWNED);
 
-	bzero(&profile, sizeof(profile));
+	memset(&profile, 0, sizeof(profile));
 
-	bzero(&ctrl_temp, sizeof(ctrl_temp));
+	memset(&ctrl_temp, 0, sizeof(ctrl_temp));
 
 #if (CAPI_OS_HINT == 1)
 	error = capi20_get_profile(controller_unit, (CAPIProfileBuffer_t *)&profile);
 #elif (CAPI_OS_HINT == 2)
 	error = capi20_get_profile(p_app->cbe_p, controller_unit, &profile, sizeof(profile));
 #else
-	error = capi20_get_profile(controller_unit, (u_int8_t *)&profile);
+	error = capi20_get_profile(controller_unit, (uint8_t *)&profile);
 #endif
 
 	if (error) {
@@ -7376,7 +7447,7 @@ chan_capi_fill_controller_info(struct cc_capi_application *p_app,
 		   ctrl_temp.support.lineinterconnect ? "[line interconnect]" : "");
 
 	cc_mutex_lock(&capi_global_lock);
-	bcopy(&ctrl_temp, &capi_controller[controller_unit], 
+	memcpy(&capi_controller[controller_unit], &ctrl_temp, 
 	      sizeof(capi_controller[0]));
 	cc_mutex_unlock(&capi_global_lock);
 
@@ -7385,10 +7456,10 @@ chan_capi_fill_controller_info(struct cc_capi_application *p_app,
 
 /* post-initialize "chan_capi" */
 
-static u_int16_t
+static uint16_t
 chan_capi_post_init(struct cc_capi_application *p_app)
 {
-	u_int16_t controller;
+	uint16_t controller;
 
 	for (controller = 0; 
 	     controller < CAPI_MAX_CONTROLLERS; 
@@ -7444,7 +7515,7 @@ capi_parse_controller_string(struct config_entry_iface *cep, const char *src)
 	char temp[CAPI_MAX_STRING];
 	char *last = NULL;
 	char *curr;
-	u_int16_t controller;
+	uint16_t controller;
 
 	if(src == NULL) return;
 
@@ -7471,7 +7542,7 @@ static struct config_entry_iface *
 capi_parse_iface_config(struct ast_variable *v, const char *name)
 {
 	struct config_entry_iface *cep;
-	u_int16_t x;
+	uint16_t x;
 	int16_t b_channels_max = 0;
 	int16_t d_channels_max = 1;
 
@@ -7681,7 +7752,7 @@ chan_capi_parse_global_config(struct ast_variable *v,
 {
 	/* initialize global config entry and set defaults */
 
-	bzero(cep, sizeof(*cep));
+	memset(cep, 0, sizeof(*cep));
 
 	strlcpy(cep->national_prefix, CAPI_NATIONAL_PREF, 
 		sizeof(cep->national_prefix));
@@ -7814,7 +7885,7 @@ static char *
 chan_capi_vanitynumber(struct ast_channel *chan, char *cmd, char *data, 
 		       char *buf, size_t len)
 {
-	u_int8_t c;
+	uint8_t c;
 	int pos;
 	
 	*buf = 0;
@@ -7878,7 +7949,7 @@ int load_module(void)
 {
 	struct cc_capi_application *p_app = NULL;
 	struct ast_config * cfg = NULL;
-	u_int8_t app_locked = 0;
+	uint8_t app_locked = 0;
 	int error = 0;
 
 
@@ -7893,7 +7964,11 @@ int load_module(void)
 
 	/* load configuration file */
 
+#if (CC_AST_VERSION >= 0x10600)
+	cfg = ast_config_load((char *)config_file, (struct ast_flags){ 0 });
+#else
 	cfg = ast_config_load((char *)config_file);
+#endif
 
 	if (!cfg) {
 	    cc_log(LOG_ERROR, "Unable to load the "
@@ -8054,7 +8129,7 @@ static
 #endif
 int unload_module()
 {
-	u_int16_t x;
+	uint16_t x;
 
 	switch (chan_capi_load_level) {
 
@@ -8123,7 +8198,12 @@ int unload_module()
 static int
 reload_module(void)
 {
+#if (CC_AST_VERSION >= 0x10600)
+	static struct ast_cli_args a = { .fd = -1, .argc = 2, .argv = 0 };
+	return (chan_capi_reload(NULL,0,&a) - (char *)0);
+#else
 	return chan_capi_reload(-1,2,0);
+#endif
 }
 
 AST_MODULE_INFO(ASTERISK_GPL_KEY, AST_MODFLAG_DEFAULT, CHAN_CAPI_DESC,
@@ -8135,7 +8215,7 @@ int usecount()
 {
 	struct cc_capi_application *p_app;
 	int cd_root_used = 0;
-	u_int16_t x;
+	uint16_t x;
 
 	for(x = 0; x < CAPI_MAX_APPLICATIONS; x++) {
 

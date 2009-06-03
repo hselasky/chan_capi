@@ -4,7 +4,7 @@
 /*
  * decode capi 2.0 info word
  */
-const char *capi_info_string(u_int16_t wInfo)
+const char *capi_info_string(uint16_t wInfo)
 {
 	switch (wInfo) {
 	/* informative values (corresponding message was processed) */

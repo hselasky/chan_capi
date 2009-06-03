@@ -98,7 +98,7 @@ enum
  * it is pretty large
  */
 #undef CAPI_COMMAND_PACK
-static __inline u_int16_t CAPI_COMMAND_PACK(u_int16_t cmd)
+static __inline uint16_t CAPI_COMMAND_PACK(uint16_t cmd)
 {
   return 
     ((((cmd) >> 8) == CAPI_PACKED) ? (cmd) :
