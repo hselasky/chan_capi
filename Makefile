@@ -63,7 +63,6 @@ CFLAGS+=-Wformat
 
 CFLAGS+=-DASTERISKVERSION=\"$(ASTERISKVERSION)\"
 
-LIBS=-ldl -lpthread -lm
 CC=gcc
 INSTALL=install
 
