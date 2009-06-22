@@ -1956,7 +1956,8 @@ cd_free(struct call_desc *cd, uint8_t hangup_what)
  * "cd_free()" when the call is complete.
  *---------------------------------------------------------------------------*/
 static struct call_desc *
-cd_alloc(struct cc_capi_application *p_app, uint16_t plci)
+cd_alloc(struct cc_capi_application *p_app, 
+    const char *name, const char *dest, uint16_t plci)
 {
     struct ast_channel *pbx_chan = NULL;
     struct call_desc *cd = NULL;
@@ -2039,7 +2040,7 @@ cd_alloc(struct cc_capi_application *p_app, uint16_t plci)
 
 #if (CC_AST_VERSION >= 0x10403)
     pbx_chan = ast_channel_alloc(0, 0, 0, 0, 
-	0, 0, 0, 0, "CAPI/Calldesc-%08x", (int)(long)cd);
+	0, 0, 0, 0, "CAPI/%s/%s-%08x", name, dest, (int)(long)cd);
 #elif (CC_AST_VERSION >= 0x10400)
     pbx_chan = ast_channel_alloc(0, 0, 0, 0, "");
 #else
@@ -3517,7 +3518,7 @@ chan_capi_request(const char *type, const struct ast_codec_pref *formats,
 
 	if (controller < CAPI_MAX_CONTROLLERS) {
 
-	    cd = cd_alloc(p_app, controller & 0xFF);
+	    cd = cd_alloc(p_app, cep->name, dest, controller & 0xFF);
 
 	    if (cd == NULL) {
 	        goto done;
@@ -3534,13 +3535,14 @@ chan_capi_request(const char *type, const struct ast_codec_pref *formats,
 	    pbx_chan = cd->pbx_chan;
 
 	    /* set default channel name */
-
+#if (CC_AST_VERSION < 0x10403)
 #if (CC_AST_VERSION >= 0x10400)
 	    ast_string_field_build(pbx_chan, name,
 				   "CAPI/%s/%s", cep->name, dest);
 #else
 	    snprintf(pbx_chan->name, sizeof(pbx_chan->name),
 		     "CAPI/%s/%s", cep->name, dest);
+#endif
 #endif
 	}
 
@@ -4056,6 +4058,8 @@ chan_capi_answer_sub(struct call_desc *cd)
 	    (cd->state == CAPI_STATE_INCALL)) {
 
 	    cc_mutex_assert(&cd->pbx_chan->lock, MA_OWNED);
+
+	    ast_setstate(cd->pbx_chan, AST_STATE_UP);
 
 	    /* copy in connected number, when the PBX 
 	     * has the channel locked:
@@ -5267,10 +5271,13 @@ capi_handle_connect_active_indication(_cmsg *CMSG, struct call_desc **pp_cd)
 			/* RESP already sent ... wait for CONNECT_B3_IND */
 		}
 	} else {
-		if (cd->flags.pbx_state_up == 0) {
+		if ((cd->flags.pbx_state_up == 0) &&
+		    (cd->flags.dir_outgoing)) {
 		    cd->flags.pbx_state_up = 1;
 			/* special treatment for early B3 connects */
+#if (CC_AST_VERSION < 0x10400)
 			ast_setstate(cd->pbx_chan, AST_STATE_UP);
+#endif
 			cd_send_pbx_frame(cd, AST_FRAME_CONTROL, 
 					  AST_CONTROL_ANSWER, NULL, 0);
 		}
@@ -5318,9 +5325,12 @@ capi_handle_connect_b3_active_indication(_cmsg *CMSG, struct call_desc **pp_cd)
 	}
 
 	if ((cd->state == CAPI_STATE_CONNECTED) &&
+	    (cd->flags.dir_outgoing) &&
 	    (cd->flags.pbx_state_up == 0)) {
 		cd->flags.pbx_state_up = 1;
+#if (CC_AST_VERSION < 0x10400)
 		ast_setstate(cd->pbx_chan, AST_STATE_UP);
+#endif
 		cd_send_pbx_frame(cd, AST_FRAME_CONTROL, 
 				  AST_CONTROL_ANSWER, NULL, 0);
 	}
@@ -5979,7 +5989,7 @@ capi_handle_cmsg(struct cc_capi_application *p_app, _cmsg *CMSG)
 	        goto done;
 	    }
 
-	    cd = cd_alloc(p_app, PLCI);
+	    cd = cd_alloc(p_app, "", "", PLCI);
 
 	    if (cd == NULL) {
 	        /* requested circuit channel not available */
