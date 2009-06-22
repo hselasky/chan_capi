@@ -2037,12 +2037,11 @@ cd_alloc(struct cc_capi_application *p_app, uint16_t plci)
 
     /* try to allocate a PBX channel */
 
-#if (CC_AST_VERSION >= 0x10400)
 #if (CC_AST_VERSION >= 0x10403)
-    pbx_chan = ast_channel_alloc(0, 0, 0, 0, "", "", "", 0, 0);
-#else
+    pbx_chan = ast_channel_alloc(0, 0, 0, 0, 
+	0, 0, 0, 0, "CAPI/Calldesc-%08x", (int)(long)cd);
+#elif (CC_AST_VERSION >= 0x10400)
     pbx_chan = ast_channel_alloc(0, 0, 0, 0, "");
-#endif
 #else
     pbx_chan = ast_channel_alloc(0);
 #endif
