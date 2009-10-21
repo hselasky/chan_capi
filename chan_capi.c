@@ -77,6 +77,9 @@
 #include "chan_capi20.h"
 #include "chan_capi.h"
 
+#undef _XPTR
+#define	_XPTR(data) *(void **)(&(data))
+
 /*
  * local variables
  */
@@ -2295,7 +2298,7 @@ cd_detect_dtmf(struct call_desc *cd, int subclass, const void *__data, int len)
 
     temp_fr.frametype = AST_FRAME_VOICE;
     temp_fr.subclass = AST_FORMAT_SLINEAR;
-    temp_fr.data = (void *)short_data;
+    _XPTR(temp_fr.data) = (void *)short_data;
     temp_fr.datalen = len;
     temp_fr.samples = len / 2;
 
@@ -2343,7 +2346,7 @@ cd_send_pbx_voice(struct call_desc *cd, const void *data_ptr, uint32_t data_len)
 
     temp_fr.frametype = AST_FRAME_VOICE;
     temp_fr.subclass = cd->pbx_capability;
-    temp_fr.data = (void *)data_ptr;
+    _XPTR(temp_fr.data) = (void *)data_ptr;
     temp_fr.datalen = data_len;
     temp_fr.samples = data_len;
     temp_fr.offset = AST_FRIENDLY_OFFSET;
@@ -2365,7 +2368,7 @@ cd_send_pbx_voice(struct call_desc *cd, const void *data_ptr, uint32_t data_len)
 
         cd_detect_dtmf(cd, 
 		       temp_fr.subclass,
-		       temp_fr.data, 
+		       _XPTR(temp_fr.data), 
 		       temp_fr.datalen);
     }
 
@@ -2424,11 +2427,11 @@ cd_send_pbx_frame(struct call_desc *cd, int frametype, int subclass,
 
     if (len) {
       
-        temp_fr.data = malloc(len+AST_FRIENDLY_OFFSET);
+        _XPTR(temp_fr.data) = malloc(len+AST_FRIENDLY_OFFSET);
 
-	if (temp_fr.data) {
+	if (_XPTR(temp_fr.data)) {
 
-	    memcpy(((uint8_t *)temp_fr.data) + AST_FRIENDLY_OFFSET,
+	    memcpy(((uint8_t *)_XPTR(temp_fr.data)) + AST_FRIENDLY_OFFSET,
 		   data, len);
 	    temp_fr.offset = AST_FRIENDLY_OFFSET;
 	    temp_fr.datalen = len;
