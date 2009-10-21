@@ -2221,12 +2221,26 @@ cd_set_cep(struct call_desc *cd, struct config_entry_iface *cep)
     /* configure DSP, if present */
 
     if (pbx_dsp) {
-        ast_dsp_set_features(pbx_dsp, DSP_FEATURE_DTMF_DETECT);
+#ifdef CC_AST_DSP_SET_DIGITMODE
+	ast_dsp_set_features(pbx_dsp, DSP_FEATURE_DIGIT_DETECT);
+
 	if (cep->options.dtmf_detect_relax) {
-	    ast_dsp_digitmode(pbx_dsp, DSP_DIGITMODE_DTMF | DSP_DIGITMODE_RELAXDTMF);
+	    ast_dsp_set_digitmode(pbx_dsp, DSP_DIGITMODE_DTMF | 
+	        DSP_DIGITMODE_RELAXDTMF);
+	} else {
+	    ast_dsp_set_digitmode(pbx_dsp, DSP_DIGITMODE_DTMF);
+	}
+#else
+        ast_dsp_set_features(pbx_dsp, DSP_FEATURE_DTMF_DETECT);
+
+	if (cep->options.dtmf_detect_relax) {
+	    ast_dsp_digitmode(pbx_dsp, DSP_DIGITMODE_DTMF | 
+	        DSP_DIGITMODE_RELAXDTMF);
 	} else {
 	    ast_dsp_digitmode(pbx_dsp, DSP_DIGITMODE_DTMF);
 	}
+#endif
+
     }
     return 0;
 }
@@ -2281,7 +2295,7 @@ cd_detect_dtmf(struct call_desc *cd, int subclass, const void *__data, int len)
 
     temp_fr.frametype = AST_FRAME_VOICE;
     temp_fr.subclass = AST_FORMAT_SLINEAR;
-    temp_fr.data = short_data;
+    temp_fr.data = (void *)short_data;
     temp_fr.datalen = len;
     temp_fr.samples = len / 2;
 

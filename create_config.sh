@@ -90,6 +90,14 @@ else
 	echo " * ast_dsp_process() without 'needlock'"
 fi
 
+if grep -q "ast_dsp_set_digitmode" $INCLUDEDIR/dsp.h; then
+	echo "#define CC_AST_DSP_SET_DIGITMODE" >>$CONFIGFILE
+	echo " * found 'ast_dsp_set_digitmode'"
+else
+	echo "#undef CC_AST_DSP_SET_DIGITMODE" >>$CONFIGFILE
+	echo " * no 'ast_dsp_set_digitmode'"
+fi
+
 if grep -q "struct ast_callerid" $INCLUDEDIR/channel.h; then
 	echo "#define CC_AST_CHANNEL_HAS_CID" >>$CONFIGFILE
 	echo " * found 'struct ast_callerid'"
