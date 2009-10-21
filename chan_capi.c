@@ -4220,7 +4220,7 @@ chan_capi_write_sub(struct call_desc *cd, struct ast_frame *frame)
 		goto done;
 	}
 
-	if ((!frame->data) || 
+	if ((!_XPTR(frame->data)) || 
 	    (!frame->datalen)) {
 		cd_verbose(cd, 3, 0, 2, "No data for voice frame\n");
 		goto done;
@@ -4230,7 +4230,7 @@ chan_capi_write_sub(struct call_desc *cd, struct ast_frame *frame)
 
 	/* compute new amplitude */
 
-	capi_copy_sound(frame->data, ptr, frame->datalen,
+	capi_copy_sound(_XPTR(frame->data), ptr, frame->datalen,
 			cd->cep ? cd->cep->tx_convert : NULL);
 
 	/* write data to ring buffer */
