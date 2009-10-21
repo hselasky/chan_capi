@@ -2251,6 +2251,7 @@ cd_set_cep(struct call_desc *cd, struct config_entry_iface *cep)
 /*---------------------------------------------------------------------------*
  *      cd_detect_dtmf - detect DTMF digits in the sound
  *---------------------------------------------------------------------------*/
+#ifndef CC_AST_DSP_SET_DIGITMODE
 static void
 cd_detect_dtmf(struct call_desc *cd, int subclass, const void *__data, int len)
 {
@@ -2328,6 +2329,7 @@ cd_detect_dtmf(struct call_desc *cd, int subclass, const void *__data, int len)
     cd->last_dtmf_digit = digit;
     return;
 }
+#endif
 
 /*---------------------------------------------------------------------------*
  *      cd_send_pbx_voice - send voice to the PBX via pipe
@@ -2363,6 +2365,7 @@ cd_send_pbx_voice(struct call_desc *cd, const void *data_ptr, uint32_t data_len)
 	return -1;
     }
 
+#ifndef CC_AST_DSP_SET_DIGITMODE
     if (cd->options.dtmf_detect_in_software &&
 	(cd->pbx_dsp != NULL)) {
 
@@ -2371,6 +2374,7 @@ cd_send_pbx_voice(struct call_desc *cd, const void *data_ptr, uint32_t data_len)
 		       _XPTR(temp_fr.data), 
 		       temp_fr.datalen);
     }
+#endif
 
     if (cd->tx_queue_len < CAPI_MAX_QLEN) {
 
@@ -3172,9 +3176,11 @@ capi_send_detect_dtmf_req(struct call_desc *cd, uint8_t flag)
 	return __capi_put_cmsg(cd->p_app, &CMSG);
     } else {
 
+#ifndef CC_AST_DSP_SET_DIGITMODE
         if (flag == 1)
 	    cd->options.dtmf_detect_in_software = 1;
 	else
+#endif
 	    cd->options.dtmf_detect_in_software = 0;
     }
     return 0;
@@ -7652,7 +7658,9 @@ capi_parse_iface_config(struct ast_variable *v, const char *name)
 	    CONF_GET_INTEGER(v, cep->options.digit_time_out, "digit_timeout");
 	    CONF_GET_INTEGER(v, cep->options.alert_time_out, "alert_timeout");
 
+#ifndef CC_AST_DSP_SET_DIGITMODE
 	    CONF_GET_TRUE(v, cep->options.dtmf_detect_in_software, "softdtmf", 1);
+#endif
 	    CONF_GET_TRUE(v, cep->options.dtmf_detect_relax, "relaxdtmf", 1);
 
 	    if (!strcasecmp(v->name, "isdnmode")) {
@@ -7760,10 +7768,11 @@ capi_parse_iface_config(struct ast_variable *v, const char *name)
 
 	/* some parameters have implications */
 
+#ifndef CC_AST_DSP_SET_DIGITMODE
 	if(cep->options.dtmf_detect_relax) {
 	    cep->options.dtmf_detect_in_software = 1;
 	}
-
+#endif
 	cc_mutex_lock(&capi_global_lock);
 
 	cep->d_channels_curr += d_channels_max;
