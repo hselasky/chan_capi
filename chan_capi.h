@@ -276,8 +276,8 @@ struct cc_capi_flags {
 	/* set if "ECT" should be sent on B3 disc. indication */
 	uint32_t send_ect_on_b3_disc : 1;
 
-	/* set if SETUP message was received */
-	uint32_t setup_received : 1;
+	/* set if we have seen the destination Type Of Number */
+	uint32_t seen_dst_ton : 1;
 
 	/* set if the PBX extension search ended */
 	uint32_t pbx_search_complete : 1;
@@ -310,6 +310,14 @@ struct cc_capi_options {
 	 * for empty destination telephone numbers:
 	 */
 	uint32_t immediate : 1;
+
+	/* converts ton info to (inter)national prefix: */
+	uint32_t ton2digit : 1;
+
+	/* set if call proceeding should not be sent
+	 * immediately after an incomplete setup
+	 */
+	uint32_t late_callproc : 1;
 
 	/* set if sending complete should be forced */
 	uint32_t send_complete_force : 1;
@@ -694,6 +702,7 @@ struct cc_capi_controller {
 /* ETSI 300 102-1 Numbering Plans */
 #define CAPI_ETSI_NPLAN_NATIONAL                0x20
 #define CAPI_ETSI_NPLAN_INTERNAT                0x10
+#define CAPI_ETSI_NPLAN_OTHER                   0x00
 
 /* Common ISDN Profiles (CIP) */
 #define CAPI_CIPI_SPEECH                        0x01

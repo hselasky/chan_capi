@@ -2467,7 +2467,8 @@ cd_handle_dst_telno(struct call_desc *cd, const uint8_t *p_dst_telno)
 {
     int error = 0;
 
-    if (cd->state != CAPI_STATE_DID) {
+    if ((cd->state != CAPI_STATE_DID) &&
+       ((cd->state != CAPI_STATE_INCALL) || (!cd->options.late_callproc))) {
         cd_verbose(cd, 4, 1, 4, "Additional destination telephone "
 		   "number digits ignored. Wrong state.\n");
 	goto done;
@@ -3813,6 +3814,7 @@ chan_capi_call_sub(struct call_desc *cd, const char *idest, int timeout)
 
 	cd->state = CAPI_STATE_CONNECTPENDING;
 	ast_setstate(pbx_chan, AST_STATE_DIALING);
+	ast_set_flag(pbx_chan, AST_FLAG_END_DTMF_ONLY);
 
 	return 0;
 }
@@ -4711,6 +4713,44 @@ handle_info_disconnect(_cmsg *CMSG, struct call_desc *cd)
 	return;
 }
 
+static uint16_t
+capi_prefix_dst_telno(struct call_desc *cd,
+    uint8_t dst_ton, void *exten_buf, int exten_size)
+{
+	uint16_t x = 0;
+
+	if (!cd->flags.seen_dst_ton) {
+		cd->flags.seen_dst_ton = 1;
+
+		cd_verbose(cd, 3, 1, 3, "CALLED PARTY NUMBER "
+		    "with TON=0x%02x\n", dst_ton);
+
+		cc_mutex_lock(&capi_global_lock);
+
+		switch (dst_ton & 0x70) {
+		case CAPI_ETSI_NPLAN_NATIONAL:
+		    strlcpy((char *)exten_buf,
+			capi_global.national_prefix,
+			exten_size);
+		    x = strlen(exten_buf);
+		    break;
+		case CAPI_ETSI_NPLAN_INTERNAT:
+		    strlcpy((char *)exten_buf,
+			 capi_global.international_prefix,
+			 exten_size);
+		    x = strlen(exten_buf);
+		    break;
+		default:
+		    break;
+		}
+		/* Avoid duplicate insertion of TON. Force TON_OTHER */
+		cd->dst_ton &= ~0x70;	/* TON_OTHER */
+
+		cc_mutex_unlock(&capi_global_lock);
+	}
+	return (x);
+}
+
 /*
  * CAPI INFO_IND
  */
@@ -4836,8 +4876,15 @@ capi_handle_info_indication(_cmsg *CMSG, struct call_desc **pp_cd)
 		break;
 
 	case 0x0070:	/* Called Party Number */
+		if (cd->options.ton2digit && cd->flags.received_setup) {
+			x = capi_prefix_dst_telno(cd,
+			    capi_get_1(INFO_IND_INFOELEMENT(CMSG), 0) & 0x7F,
+			    exten_buf, sizeof(exten_buf));
+		} else {
+			x = 0;
+		}
 		capi_get_multi_1(INFO_IND_INFOELEMENT(CMSG), 1, 
-				 &exten_buf, sizeof(exten_buf));
+		    ((char *)exten_buf) + x, sizeof(exten_buf) - x);
 
 		cd_verbose(cd, 3, 1, 3, "CALLED PARTY NUMBER '%s'\n", 
 			   exten_buf);
@@ -5668,12 +5715,17 @@ cd_start_pbx(struct call_desc **pp_cd, const char *exten)
 
 	cd->flags.pbx_started = 1;
 
-	/* send CALL PROCEEDING back to caller, 
-	 * which will also set new state
-	 */
-	capi_send_alert_req(cd, 1);
+	if (cd->flags.sending_complete_received ||
+	    (!cd->options.late_callproc)) {
+	   /* send CALL PROCEEDING back to caller,
+	    * which will also set new state
+	    */
+	    capi_send_alert_req(cd, 1);
+	} else
+	    cd->state = CAPI_STATE_INCALL;
 
 	cd_verbose(cd, 2, 0, 2, "Started PBX\n");
+	ast_set_flag(pbx_chan, AST_FLAG_END_DTMF_ONLY);
 
 	return;
 
@@ -5703,6 +5755,7 @@ capi_handle_connect_indication(_cmsg *CMSG, struct call_desc **pp_cd)
 	struct ast_channel *pbx_chan = cd->pbx_chan;
 	uint8_t start_immediate;
 	char buffer[AST_MAX_EXTENSION];
+	uint16_t x;
 
 	cd->bchannelinfo[0] = 
 	  capi_get_1(CONNECT_IND_BCHANNELINFORMATION(CMSG),0) + '0';
@@ -5711,9 +5764,18 @@ capi_handle_connect_indication(_cmsg *CMSG, struct call_desc **pp_cd)
 	  (capi_get_2(CONNECT_IND_SENDINGCOMPLETE(CMSG), 0) == 0x0001);
 
 	capi_get_multi_1(CONNECT_IND_CALLEDPARTYNUMBER(CMSG), 1, 
-			 &cd->dst_telno, sizeof(cd->dst_telno));
+			 &buffer, sizeof(buffer));
+
 	cd->dst_ton = 
 	  capi_get_1(CONNECT_IND_CALLEDPARTYNUMBER(CMSG), 0) & 0x7f;
+
+	if (cd->options.ton2digit && (buffer[0] != 0)) {
+		x = capi_prefix_dst_telno(cd, cd->dst_ton,
+			 &cd->dst_telno, sizeof(cd->dst_telno));
+	} else {
+		x = 0;
+	}
+	strlcpy(cd->dst_telno + x, buffer, sizeof(cd->dst_telno) - x);
 
 	capi_get_multi_1(CONNECT_IND_CALLINGPARTYNUMBER(CMSG), 2, 
 			 &cd->src_telno, sizeof(cd->src_telno));
@@ -7691,6 +7753,8 @@ capi_parse_iface_config(struct ast_variable *v, const char *name)
 	    CONF_GET_TRUE(v, cep->options.bridge, "bridge", 1);
 	    CONF_GET_TRUE(v, cep->options.ntmode, "ntmode", 1);
 	    CONF_GET_TRUE(v, cep->options.dtmf_generate, "dtmf_generate", 1);
+	    CONF_GET_TRUE(v, cep->options.ton2digit, "ton2digit", 1);
+	    CONF_GET_TRUE(v, cep->options.late_callproc, "late_callproc", 1);
 
 	    if (!strcasecmp(v->name, "callgroup")) {
 	        cep->call_group = ast_get_group(v->value);
