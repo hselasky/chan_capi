@@ -372,6 +372,7 @@ struct config_entry_global {
 	int capability;
 	uint16_t digit_time_out; /* in seconds */
 	uint16_t alert_time_out; /* in seconds */
+	uint8_t ton2digit;
 };
 
 /* interface config entry structure */

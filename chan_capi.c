@@ -4725,6 +4725,9 @@ capi_prefix_dst_telno(struct call_desc *cd,
 		cd_verbose(cd, 3, 1, 3, "CALLED PARTY NUMBER "
 		    "with TON=0x%02x\n", dst_ton);
 
+		if (cd->options.ton2digit == 0)
+			return;
+
 		cc_mutex_lock(&capi_global_lock);
 
 		switch (dst_ton & 0x70) {
@@ -4876,7 +4879,7 @@ capi_handle_info_indication(_cmsg *CMSG, struct call_desc **pp_cd)
 		break;
 
 	case 0x0070:	/* Called Party Number */
-		if (cd->options.ton2digit && cd->flags.received_setup) {
+		if (cd->flags.received_setup) {
 			x = capi_prefix_dst_telno(cd,
 			    capi_get_1(INFO_IND_INFOELEMENT(CMSG), 0) & 0x7F,
 			    exten_buf, sizeof(exten_buf));
@@ -5769,7 +5772,7 @@ capi_handle_connect_indication(_cmsg *CMSG, struct call_desc **pp_cd)
 	cd->dst_ton = 
 	  capi_get_1(CONNECT_IND_CALLEDPARTYNUMBER(CMSG), 0) & 0x7f;
 
-	if (cd->options.ton2digit && (buffer[0] != 0)) {
+	if (buffer[0] != 0) {
 		x = capi_prefix_dst_telno(cd, cd->dst_ton,
 			 &cd->dst_telno, sizeof(cd->dst_telno));
 	} else {
@@ -7686,6 +7689,7 @@ capi_parse_iface_config(struct ast_variable *v, const char *name)
 	cep->rx_gain = capi_global.rx_gain;
 	cep->tx_gain = capi_global.tx_gain;
 	cep->options.digit_time_out = capi_global.digit_time_out;
+	cep->options.ton2digit = capi_global.ton2digit;
 	strlcpy(cep->language, capi_global.default_language, sizeof(cep->language));
 
 	cc_mutex_unlock(&capi_global_lock);
@@ -7953,8 +7957,9 @@ chan_capi_parse_global_config(struct ast_variable *v,
 		if(cep->alert_time_out > 120) {
 		   cep->alert_time_out = 120; /* seconds */
 		}
+	    } else if (!strcasecmp(v->name, "ton2digit")) {
+		cep->ton2digit = atoi(v->value) ? 1 : 0;
 	    }
-
 	}
 	return;
 }
