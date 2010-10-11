@@ -4726,7 +4726,7 @@ capi_prefix_dst_telno(struct call_desc *cd,
 		    "with TON=0x%02x\n", dst_ton);
 
 		if (cd->options.ton2digit == 0)
-			return;
+			return (0);
 
 		cc_mutex_lock(&capi_global_lock);
 
