@@ -173,6 +173,10 @@ fi
 echo "#define ___CC_AST_VERSION(a,b) a##b" >>$CONFIGFILE
 echo "#define __CC_AST_VERSION(a,b) ___CC_AST_VERSION(a,b)" >>$CONFIGFILE
 
+if grep -q "ASTERISK_VERSION_NUM.*108" $INCLUDEDIR/version.h; then
+	echo "#define CC_AST_VERSION __CC_AST_VERSION(0x,ASTERISK_VERSION_NUM)" >>$CONFIGFILE
+	echo " * found Asterisk version 1.8.x"
+else
 if grep -q "ASTERISK_VERSION_NUM.*106" $INCLUDEDIR/version.h; then
 	echo "#define CC_AST_VERSION __CC_AST_VERSION(0x,ASTERISK_VERSION_NUM)" >>$CONFIGFILE
 	echo " * found Asterisk version 1.6.x"
@@ -187,6 +191,7 @@ if grep -q "ASTERISK_VERSION_NUM.*0102" $INCLUDEDIR/version.h; then
 else
 	echo "#define CC_AST_VERSION 0x10200" >>$CONFIGFILE
 	echo " * forcing Asterisk version 1.2.0"
+fi
 fi
 fi
 fi

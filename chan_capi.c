@@ -57,6 +57,9 @@
 #ifdef CC_AST_MOH_PRESENT
 #include <asterisk/musiconhold.h>
 #endif
+#if (CC_AST_VERSION >= 0x10800)
+#include <asterisk/callerid.h>
+#endif
 #include <sys/time.h>
 #include <sys/signal.h>
 #include <stdlib.h>
@@ -102,6 +105,15 @@ LOCAL_USER_DECL;
 static int unload_module();
 #undef CC_AST_CUSTOM_FUNCTION
 #define AST_MODULE "chan_capi"
+#endif
+
+#if (CC_AST_VERSION >= 0x10800)
+#undef strlcpy
+#undef strlcat
+#define	FRAME_SUBCLASS(x) x.integer
+#define	ast_channel_free ast_channel_release
+#else
+#define	FRAME_SUBCLASS(x) x
 #endif
 
 /*
@@ -2041,7 +2053,10 @@ cd_alloc(struct cc_capi_application *p_app,
 
     /* try to allocate a PBX channel */
 
-#if (CC_AST_VERSION >= 0x10403)
+#if (CC_AST_VERSION >= 0x10800)
+    pbx_chan = ast_channel_alloc(0, 0, 0, 0, 
+	0, 0, 0, 0, 0, "CAPI/%s/%s-%08x", name, dest, (int)(long)cd);
+#elif (CC_AST_VERSION >= 0x10403)
     pbx_chan = ast_channel_alloc(0, 0, 0, 0, 
 	0, 0, 0, 0, "CAPI/%s/%s-%08x", name, dest, (int)(long)cd);
 #elif (CC_AST_VERSION >= 0x10400)
@@ -2298,7 +2313,7 @@ cd_detect_dtmf(struct call_desc *cd, int subclass, const void *__data, int len)
     memset(&temp_fr, 0, sizeof(temp_fr));
 
     temp_fr.frametype = AST_FRAME_VOICE;
-    temp_fr.subclass = AST_FORMAT_SLINEAR;
+    FRAME_SUBCLASS(temp_fr.subclass) = AST_FORMAT_SLINEAR;
     _XPTR(temp_fr.data) = (void *)short_data;
     temp_fr.datalen = len;
     temp_fr.samples = len / 2;
@@ -2310,7 +2325,7 @@ cd_detect_dtmf(struct call_desc *cd, int subclass, const void *__data, int len)
         memset(&temp_fr, 0, sizeof(temp_fr));
 
 	temp_fr.frametype = AST_FRAME_DTMF;
-	temp_fr.subclass = digit;
+	FRAME_SUBCLASS(temp_fr.subclass) = digit;
 
         cd_verbose(cd, 1, 1, 3, "Detected DTMF "
 		   "digit: '%c'\n", digit);
@@ -2347,7 +2362,7 @@ cd_send_pbx_voice(struct call_desc *cd, const void *data_ptr, uint32_t data_len)
     memset(&temp_fr, 0, sizeof(temp_fr));
 
     temp_fr.frametype = AST_FRAME_VOICE;
-    temp_fr.subclass = cd->pbx_capability;
+    FRAME_SUBCLASS(temp_fr.subclass) = cd->pbx_capability;
     _XPTR(temp_fr.data) = (void *)data_ptr;
     temp_fr.datalen = data_len;
     temp_fr.samples = data_len;
@@ -2357,7 +2372,7 @@ cd_send_pbx_voice(struct call_desc *cd, const void *data_ptr, uint32_t data_len)
 
     cd_verbose(cd, 8, 1, 3, "temp_fr.datalen=%d, "
 	       "temp_fr.subclass=%d\n", temp_fr.datalen, 
-	       temp_fr.subclass);
+	       FRAME_SUBCLASS(temp_fr.subclass));
 
     if (cd->fd[1] == -1) {
         cc_log(LOG_ERROR, "No pipe for %s\n",
@@ -2370,7 +2385,7 @@ cd_send_pbx_voice(struct call_desc *cd, const void *data_ptr, uint32_t data_len)
 	(cd->pbx_dsp != NULL)) {
 
         cd_detect_dtmf(cd, 
-		       temp_fr.subclass,
+		       FRAME_SUBCLASS(temp_fr.subclass),
 		       _XPTR(temp_fr.data), 
 		       temp_fr.datalen);
     }
@@ -2427,7 +2442,7 @@ cd_send_pbx_frame(struct call_desc *cd, int frametype, int subclass,
     memset(&temp_fr, 0, sizeof(temp_fr));
 
     temp_fr.frametype = frametype;
-    temp_fr.subclass = subclass;
+    FRAME_SUBCLASS(temp_fr.subclass) = subclass;
 
     if (len) {
       
@@ -3438,6 +3453,10 @@ parse_dialstring(char *buffer, const char **interface, const char **dest,
  * Prepare an outgoing call
  *---------------------------------------------------------------------------*/
 static struct ast_channel *
+#if (CC_AST_VERSION >= 0x10800)
+chan_capi_request(const char *type, format_t format,
+    const struct ast_channel *requestor, void *data, int *cause)
+#else
 #ifdef CC_OLD_CODEC_FORMATS
 #ifdef CC_AST_HAVE_TECH_PVT
 chan_capi_request(const char *type, int format, void *data, int *cause)
@@ -3447,6 +3466,7 @@ chan_capi_request(char *type, int format, void *data)
 #else
 chan_capi_request(const char *type, const struct ast_codec_pref *formats, 
 		  void *data, int *cause)
+#endif
 #endif
 {
 	struct call_desc *cd = NULL;
@@ -3669,11 +3689,26 @@ chan_capi_call_sub(struct call_desc *cd, const char *idest, int timeout)
 		}
 	}
 
+#if (CC_AST_VERSION >= 0x10800)
+#if	(AST_PRES_USER_NUMBER_UNSCREENED != 0x00) || \
+	(AST_PRES_USER_NUMBER_PASSED_SCREEN != 0x01) || \
+	(AST_PRES_USER_NUMBER_FAILED_SCREEN != 0x02) || \
+	(AST_PRES_NETWORK_NUMBER != 0x03) || \
+	(AST_PRES_ALLOWED != 0x00) || \
+	(AST_PRES_RESTRICTED != 0x20) || \
+	(AST_PRES_UNAVAILABLE != 0x40) || \
+	(AST_PRES_RESERVED != 0x60)
+#error "Please check the defined AST_PRES_XXX!"
+#endif
+	CLIR = pbx_chan->caller.id.number.presentation;
+	callernplan = pbx_chan->caller.id.number.plan;
+#else
 #ifdef CC_AST_CHANNEL_HAS_CID
 	CLIR = pbx_chan->cid.cid_pres;
 	callernplan = pbx_chan->cid.cid_ton & 0x7f;
 #else    
 	CLIR = pbx_chan->callingpres;
+#endif
 #endif
 	if ((ton = pbx_builtin_getvar_helper(pbx_chan, "CALLERTON"))) {
 		callernplan = atoi(ton) & 0x7f;
@@ -3712,12 +3747,17 @@ chan_capi_call_sub(struct call_desc *cd, const char *idest, int timeout)
 		CONNECT_REQ_CALLEDPARTYSUBADDRESS(&CMSG) = (_cstruct)calledsubaddress;
 	}
 
+#if (CC_AST_VERSION >= 0x10800)
+	if (pbx_chan->caller.id.number.str && pbx_chan->caller.id.number.valid)
+		strlcpy(callerid, pbx_chan->caller.id.number.str, sizeof(callerid));
+#else
 #ifdef CC_AST_CHANNEL_HAS_CID
 	if (pbx_chan->cid.cid_num) 
 		strlcpy(callerid, pbx_chan->cid.cid_num, sizeof(callerid));
 #else
 	if (pbx_chan->callerid) 
 		strlcpy(callerid, pbx_chan->callerid, sizeof(callerid));
+#endif
 #endif
 	else
 		callerid[0] = '\0';
@@ -3762,7 +3802,12 @@ chan_capi_call_sub(struct call_desc *cd, const char *idest, int timeout)
 	p = pbx_builtin_getvar_helper(pbx_chan, "DISPLAY");
 
 	if (p == NULL) {
+#if (CC_AST_VERSION >= 0x10800)
+	    if (pbx_chan->caller.id.name.valid)
+		p = pbx_chan->caller.id.name.str;
+#else
 	    p = pbx_chan->cid.cid_name;
+#endif
 	}
 
 	if (p) {
@@ -4146,7 +4191,7 @@ chan_capi_read_sub(struct call_desc *cd)
 	}
 
 	if ((cd->pbx_rd.frametype == AST_FRAME_DTMF) && 
-	    (cd->pbx_rd.subclass == 'f')) {
+	    (FRAME_SUBCLASS(cd->pbx_rd.subclass) == 'f')) {
 #if 0
 	    XXX This code is disabled because calling "ast_async_goto()"
 	    XXX causes locking order reversal.
@@ -4222,9 +4267,9 @@ chan_capi_write_sub(struct call_desc *cd, struct ast_frame *frame)
 		goto done;
 	}
 
-	if (frame->subclass != cd->pbx_capability) {
+	if (FRAME_SUBCLASS(frame->subclass) != cd->pbx_capability) {
 		cc_log(LOG_ERROR, "dont know how to write "
-		       "subclass %d\n", frame->subclass);
+		       "subclass %d\n", FRAME_SUBCLASS(frame->subclass));
 		goto done;
 	}
 
@@ -4914,16 +4959,17 @@ capi_handle_info_indication(_cmsg *CMSG, struct call_desc **pp_cd)
 		pbx_builtin_setvar_helper(pbx_chan, "REDIRECTINGNUMBER", exten_buf);
 		pbx_builtin_setvar_helper(pbx_chan, "REDIRECTREASON", reason_buf);
 
+#if (CC_AST_VERSION >= 0x10800)
+		free(pbx_chan->redirecting.to.number.str);
+		pbx_chan->redirecting.to.number.str = strdup(exten_buf);
+#else
 #ifdef CC_AST_CHANNEL_HAS_CID
-		if (pbx_chan->cid.cid_rdnis) {
-		    free(pbx_chan->cid.cid_rdnis);
-		}
+		free(pbx_chan->cid.cid_rdnis);
 		pbx_chan->cid.cid_rdnis = strdup(exten_buf);
 #else
-		if (pbx_chan->rdnis) {
-		    free(pbx_chan->rdnis);
-		}
+		free(pbx_chan->rdnis);
 		pbx_chan->rdnis = strdup(exten_buf);
+#endif
 #endif
 #endif
 		break;
@@ -5666,26 +5712,31 @@ cd_copy_telno_ext(struct call_desc *cd, const char *exten)
 
 	cc_mutex_unlock(&capi_global_lock);
 
+#if (CC_AST_VERSION >= 0x10800)
+	free(pbx_chan->dialed.number.str);
+	pbx_chan->dialed.number.str = strdup(cd->dst_telno);
+	pbx_chan->dialed.number.plan = 0;
+
+	free(pbx_chan->caller.id.number.str);
+	pbx_chan->caller.id.number.str = strdup(cd->src_telno);
+	pbx_chan->caller.id.number.plan = 1;
+	pbx_chan->caller.id.number.presentation = 1;
+	pbx_chan->caller.id.number.valid = 1;
+#else
 #ifdef CC_AST_CHANNEL_HAS_CID
-	if (pbx_chan->cid.cid_num) {
-	    free(pbx_chan->cid.cid_num);
-	}
-	if (pbx_chan->cid.cid_dnid) {
-	    free(pbx_chan->cid.cid_dnid);
-	}
+	free(pbx_chan->cid.cid_num);
+	free(pbx_chan->cid.cid_dnid);
 
 	pbx_chan->cid.cid_num = strdup(cd->src_telno);
 	pbx_chan->cid.cid_dnid = strdup(cd->dst_telno);
 	pbx_chan->cid.cid_ton = 0; /* NOTE: already prefixed number! */
 #else
-	if (pbx_chan->callerid) {
-	    free(pbx_chan->callerid);
-	}
-	if (pbx_chan->dnid) {
-	    free(pbx_chan->dnid);
-	}
+	free(pbx_chan->callerid);
+	free(pbx_chan->dnid);
+
 	pbx_chan->callerid = strdup(cd->src_telno);
 	pbx_chan->dnid = strdup(cd->dst_telno);
+#endif
 #endif
     }
     return;
@@ -5794,10 +5845,15 @@ capi_handle_connect_indication(_cmsg *CMSG, struct call_desc **pp_cd)
 #ifdef CC_AST_CHANNEL_HAS_TRANSFERCAP	
 	pbx_chan->transfercapability = cip2tcap(cd->msg_cip);
 #endif
+
+#if (CC_AST_VERSION >= 0x10800)
+	pbx_chan->caller.id.number.presentation = cd->src_pres;
+#else
 #ifdef CC_AST_CHANNEL_HAS_CID
 	pbx_chan->cid.cid_pres = cd->src_pres;
 #else    
 	pbx_chan->callingpres = cd->src_pres;
+#endif
 #endif
 #ifdef CC_AST_CHANNEL_HAS_TRANSFERCAP	
 	pbx_builtin_setvar_helper(pbx_chan, "TRANSFERCAPABILITY", 
@@ -6692,7 +6748,11 @@ chan_capi_commands[] = {
  *      chan_capi_command_exec - "chan_capi" command interface
  *---------------------------------------------------------------------------*/
 static int
+#if (CC_AST_VERSION >= 0x10800)
+chan_capi_command_exec(struct ast_channel *chan, const char *data)
+#else
 chan_capi_command_exec(struct ast_channel *chan, void *data)
+#endif
 {
 #if (CC_AST_VERSION >= 0x10400)
 	struct ast_module_user *u;
@@ -7121,7 +7181,11 @@ chan_capi_get_channel_info(int fd, int argc, char *argv[])
 #if (CC_AST_VERSION >= 0x10600)
     int fd = a->fd;
     int argc = a->argc;
+#if (CC_AST_VERSION >= 0x10800)
+    const char * const *argv = a->argv;
+#else
     char **argv = a->argv;
+#endif
     switch (cmd) {
     case CLI_INIT:
     case CLI_GENERATE:
