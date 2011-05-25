@@ -2395,6 +2395,10 @@ cd_send_pbx_voice(struct call_desc *cd, const void *data_ptr, uint32_t data_len)
 
         cd->tx_queue_len++;
 
+	/* get the rx_time before updating it */
+
+	temp_fr.delivery = cd->rx_time;
+
 	/* compute correct delivery */
 
 	cd->rx_time.tv_usec += (temp_fr.samples * 125);
@@ -2402,8 +2406,6 @@ cd_send_pbx_voice(struct call_desc *cd, const void *data_ptr, uint32_t data_len)
 	    cd->rx_time.tv_usec -= 1000000;
 	    cd->rx_time.tv_sec += 1;
 	}
-
-	temp_fr.delivery = cd->rx_time;
 
 	len = write(cd->fd[1], &temp_fr, sizeof(temp_fr));
 
