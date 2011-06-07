@@ -1,5 +1,5 @@
 /*-
- * Copyright (c) 2006-2009 Hans Petter Selasky. All rights reserved.
+ * Copyright (c) 2006-2011 Hans Petter Selasky. All rights reserved.
  * Copyright (C) 2005 Cytronics & Melware, Armin Schindler
  * Copyright (C) 2002-2005 Junghanns.NET GmbH, Klaus-Peter Junghanns
  * 
@@ -3702,8 +3702,8 @@ chan_capi_call_sub(struct call_desc *cd, const char *idest, int timeout)
 	(AST_PRES_RESERVED != 0x60)
 #error "Please check the defined AST_PRES_XXX!"
 #endif
-	CLIR = pbx_chan->caller.id.number.presentation;
-	callernplan = pbx_chan->caller.id.number.plan;
+	CLIR = pbx_chan->connected.id.number.presentation;
+	callernplan = pbx_chan->connected.id.number.plan;
 #else
 #ifdef CC_AST_CHANNEL_HAS_CID
 	CLIR = pbx_chan->cid.cid_pres;
@@ -3750,8 +3750,9 @@ chan_capi_call_sub(struct call_desc *cd, const char *idest, int timeout)
 	}
 
 #if (CC_AST_VERSION >= 0x10800)
-	if (pbx_chan->caller.id.number.str && pbx_chan->caller.id.number.valid)
-		strlcpy(callerid, pbx_chan->caller.id.number.str, sizeof(callerid));
+	if (pbx_chan->connected.id.number.str &&
+	    pbx_chan->connected.id.number.valid)
+		strlcpy(callerid, pbx_chan->connected.id.number.str, sizeof(callerid));
 #else
 #ifdef CC_AST_CHANNEL_HAS_CID
 	if (pbx_chan->cid.cid_num) 
@@ -3805,8 +3806,8 @@ chan_capi_call_sub(struct call_desc *cd, const char *idest, int timeout)
 
 	if (p == NULL) {
 #if (CC_AST_VERSION >= 0x10800)
-	    if (pbx_chan->caller.id.name.valid)
-		p = pbx_chan->caller.id.name.str;
+	    if (pbx_chan->connected.id.name.valid)
+		p = pbx_chan->connected.id.name.str;
 #else
 	    p = pbx_chan->cid.cid_name;
 #endif
