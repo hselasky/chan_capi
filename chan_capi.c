@@ -6437,8 +6437,8 @@ chan_capi_cmd_receive_fax(struct call_desc *cd, struct call_desc *cd_unused,
 	const char *headline;
 	uint16_t error = 0;
 
-	filename = strsep(&param, "|");
-	stationid = strsep(&param, "|");
+	filename = strsep(&param, "|,");
+	stationid = strsep(&param, "|,");
 	headline = param;
 
 	if (!stationid)
@@ -6786,7 +6786,7 @@ chan_capi_command_exec(struct ast_channel *chan, void *data)
 	/* duplicate string using alloca */
 
 	stringp = ast_strdupa(data);
-	command = strsep(&stringp, "|");
+	command = strsep(&stringp, "|,");
 	params = stringp;
 
 	cc_verbose(2, 1, VERBOSE_PREFIX_3 "capiCommand: "
