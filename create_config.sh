@@ -46,8 +46,13 @@ if grep -q "struct ast_codec_pref" $INCLUDEDIR/channel.h; then
 	echo "#undef CC_OLD_CODEC_FORMATS" >>$CONFIGFILE
 	echo " * found 'struct ast_codec_pref'"
 else
+if grep -q "struct ast_codec_pref" $INCLUDEDIR/format_pref.h; then
+	echo "#undef CC_OLD_CODEC_FORMATS" >>$CONFIGFILE
+	echo " * found 'struct ast_codec_pref'"
+else
 	echo "#define CC_OLD_CODEC_FORMATS" >>$CONFIGFILE
 	echo " * no 'struct ast_codec_pref'"
+fi
 fi
 
 if grep -q "struct ast_channel_tech" $INCLUDEDIR/channel.h; then
@@ -189,8 +194,13 @@ if grep -q "ASTERISK_VERSION_NUM.*0102" $INCLUDEDIR/version.h; then
 	echo "#define CC_AST_VERSION __CC_AST_VERSION(0x,ASTERISK_VERSION_NUM)" >>$CONFIGFILE
 	echo " * found Asterisk version 1.2.x"
 else
+if grep -q "ASTERISK_VERSION_NUM.*1001" $INCLUDEDIR/version.h; then
+	echo "#define CC_AST_VERSION __CC_AST_VERSION(0x,ASTERISK_VERSION_NUM)" >>$CONFIGFILE
+	echo " * found Asterisk version 10.1.x"
+else
 	echo "#define CC_AST_VERSION 0x10200" >>$CONFIGFILE
 	echo " * forcing Asterisk version 1.2.0"
+fi
 fi
 fi
 fi

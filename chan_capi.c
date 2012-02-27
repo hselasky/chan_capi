@@ -91,7 +91,7 @@
 
 #ifdef CC_AST_HAVE_TECH_PVT
 static const char chan_capi_pbx_type[] = "CAPI";
-extern const struct ast_channel_tech chan_capi_tech;
+extern struct ast_channel_tech chan_capi_tech;
 #else
 static char *chan_capi_pbx_type = "CAPI";
 #endif
@@ -1978,6 +1978,9 @@ cd_alloc(struct cc_capi_application *p_app,
     struct call_desc *cd = NULL;
     char buffer[16];
     int fds[2] = { 0, 0 };
+#if (CC_AST_VERSION >= 0x100100)
+    struct ast_format ast_fmt;
+#endif
     int fmt;
 
     cc_mutex_assert(&p_app->lock, MA_OWNED);
@@ -2084,15 +2087,31 @@ cd_alloc(struct cc_capi_application *p_app,
 
     cd->pbx_capability            = fmt;
 
+#if (CC_AST_VERSION >= 0x100100)
+    ast_format_set(&ast_fmt, fmt, 0);
+    ast_format_cap_add(pbx_chan->nativeformats, &ast_fmt);
+#else
 #ifdef CC_OLD_CODEC_FORMATS
     pbx_chan->nativeformats       = fmt;
 #else
     ast_codec_pref_init(&pbx_chan->nativeformats);
     ast_codec_pref_append(&pbx_chan->nativeformats, fmt);
 #endif
+#endif
 
+#if (CC_AST_VERSION >= 0x100100)
+    ast_best_codec(pbx_chan->nativeformats, &ast_fmt);
+#else
     fmt = ast_best_codec(fmt);
+#endif
 
+#if (CC_AST_VERSION >= 0x100100)
+    pbx_chan->tech = &chan_capi_tech;
+    ast_format_copy(&pbx_chan->writeformat, &ast_fmt);
+    ast_format_copy(&pbx_chan->rawwriteformat, &ast_fmt);
+    ast_format_copy(&pbx_chan->readformat, &ast_fmt);
+    ast_format_copy(&pbx_chan->rawreadformat, &ast_fmt);
+#else
 #ifdef CC_AST_HAVE_SET_READ_FORMAT
     ast_set_read_format(pbx_chan, fmt);
 #endif
@@ -2116,6 +2135,7 @@ cd_alloc(struct cc_capi_application *p_app,
     }
     pbx_chan->pvt->rawreadformat  = fmt; /* XXX cleanup */
     pbx_chan->pvt->rawwriteformat = fmt; /* XXX cleanup */
+#endif
 #endif
 
     /* initialize call descriptor */
@@ -3455,6 +3475,11 @@ parse_dialstring(char *buffer, const char **interface, const char **dest,
  * Prepare an outgoing call
  *---------------------------------------------------------------------------*/
 static struct ast_channel *
+#if (CC_AST_VERSION >= 0x100100)
+chan_capi_request(const char *type, struct ast_format_cap *format,
+    const struct ast_channel *requestor, void *data, int *cause)
+
+#else
 #if (CC_AST_VERSION >= 0x10800)
 chan_capi_request(const char *type, format_t format,
     const struct ast_channel *requestor, void *data, int *cause)
@@ -3468,6 +3493,7 @@ chan_capi_request(char *type, int format, void *data)
 #else
 chan_capi_request(const char *type, const struct ast_codec_pref *formats, 
 		  void *data, int *cause)
+#endif
 #endif
 #endif
 {
@@ -7522,10 +7548,12 @@ static struct ast_cli_entry  cli_no_debug =
 	  "       Disables dumping of CAPI packets for debugging purposes\n" };
 
 #ifdef CC_AST_HAVE_TECH_PVT
-const struct ast_channel_tech chan_capi_tech = {
+struct ast_channel_tech chan_capi_tech = {
 	.type               = chan_capi_pbx_type,
 	.description        = CHAN_CAPI_DESC,
+#if (CC_AST_VERSION < 0x100100)
 	.capabilities       = AST_FORMAT_ALAW,
+#endif
 	.requester          = chan_capi_request,
 #if (CC_AST_VERSION >= 0x10400)
 	.send_digit_begin   = chan_capi_send_digit_begin,
@@ -8156,6 +8184,18 @@ int load_module(void)
 	uint8_t app_locked = 0;
 	int error = 0;
 
+#if (CC_AST_VERSION >= 0x100100)
+	chan_capi_tech.capabilities = ast_format_cap_alloc();
+	if (chan_capi_tech.capabilities == NULL) {
+		return (AST_MODULE_LOAD_DECLINE);
+	} else {
+		struct ast_format fmt;
+		ast_format_set(&fmt, AST_FORMAT_ALAW, 0);
+		ast_format_cap_add(chan_capi_tech.capabilities, &fmt);
+		ast_format_set(&fmt, AST_FORMAT_ULAW, 0);
+		ast_format_cap_add(chan_capi_tech.capabilities, &fmt);
+	}
+#endif
 
 	/* first initialize some mutexes */
 
@@ -8395,6 +8435,11 @@ int unload_module()
 		   chan_capi_load_level);
 	    break;
 	}
+
+#if (CC_AST_VERSION >= 0x100100)
+	chan_capi_tech.capabilities =
+	    ast_format_cap_destroy(chan_capi_tech.capabilities);
+#endif
 	return 0;
 }
 

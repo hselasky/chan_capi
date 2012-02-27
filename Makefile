@@ -80,7 +80,7 @@ clean:
 	rm -f config.h
 	rm -f *.so *.o
 
-config.h:
+config.h: create_config.sh
 	./create_config.sh "$(ASTERISK_HEADER_DIR)"
 
 chan_capi.so: $(OBJECTS)
