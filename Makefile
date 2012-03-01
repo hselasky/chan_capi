@@ -90,6 +90,9 @@ SRCS+=	c20msg.c
 SRCS+=	chan_capi.c
 SRCS+=  config.h
 
+FILES+= capi.conf.sample
+FILESDIR=${ETCDIR}
+
 CLEANFILES+= config.h
 
 config.h: ${.CURDIR}/Makefile
