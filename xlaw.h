@@ -1443,7 +1443,7 @@ static const uint8_t __capi_signed_to_ulaw[0x4000] = {
 
 /* NOTE: returns a bit-reversed value */
 
-uint8_t
+static uint8_t
 capi_signed_to_ulaw(int32_t temp)
 {
     if (temp > 0x7FFF)
@@ -2184,7 +2184,7 @@ static const uint8_t __capi_signed_to_alaw[0x2000] = {
 
 /* NOTE: returns a bit-reversed value */
 
-uint8_t
+static uint8_t
 capi_signed_to_alaw(int32_t temp)
 {
     if (temp > 0x7FFF)

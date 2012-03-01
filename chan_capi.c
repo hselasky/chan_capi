@@ -102,7 +102,7 @@ static const char * const config_file = "capi.conf";
 STANDARD_LOCAL_USER;
 LOCAL_USER_DECL;
 #else
-static int unload_module();
+static int unload_module(void);
 #undef CC_AST_CUSTOM_FUNCTION
 #define AST_MODULE "chan_capi"
 #endif
@@ -355,7 +355,7 @@ strlcat(dst, src, siz)
 /* simple counter */
 
 static uint32_t
-capi_get_counter()
+capi_get_counter(void)
 {
     static uint32_t count = 0;
     uint32_t temp;
@@ -928,7 +928,7 @@ cep_alloc(const char *name)
 }
 
 static void
-cep_unload()
+cep_unload(void)
 {
     struct config_entry_iface **cep_p;
     struct config_entry_iface *cep;
@@ -972,7 +972,7 @@ cep_unload()
 }
 
 static struct config_entry_iface *
-cep_root_acquire()
+cep_root_acquire(void)
 {
     struct config_entry_iface *cep;
 
@@ -982,7 +982,7 @@ cep_root_acquire()
 }
 
 static void
-cep_root_release()
+cep_root_release(void)
 {
     /* currently does nothing: eventually this function
      * should do some cleanup, update config ...
@@ -1081,7 +1081,7 @@ capi_application_free(struct cc_capi_application *p_app)
  *      capi_application_alloc - allocate a new CAPI application
  *---------------------------------------------------------------------------*/
 static struct cc_capi_application *
-capi_application_alloc()
+capi_application_alloc(void)
 {
     struct cc_capi_application *p_app;
     struct capi20_backend *cbe_p;
@@ -2197,7 +2197,7 @@ cd_alloc(struct cc_capi_application *p_app,
 static uint8_t
 cd_set_cep(struct call_desc *cd, struct config_entry_iface *cep)
 {
-    const struct cc_capi_options options_zero = { /* zero */ };
+    const struct cc_capi_options options_zero;
     uint8_t channel_type = ((cd->bchannelinfo[0] != '0') && 
 			     (cd->bchannelinfo[0] != 0)) ? 'D' : 'B';
 
@@ -2429,7 +2429,7 @@ cd_send_pbx_voice(struct call_desc *cd, const void *data_ptr, uint32_t data_len)
 
 	len = write(cd->fd[1], &temp_fr, sizeof(temp_fr));
 
-	if (len < sizeof(temp_fr)) {
+	if (len < (int)sizeof(temp_fr)) {
 
 	    cd_log(cd, LOG_ERROR, "wrote %d bytes instead "
 		   "of %d bytes!\n", len, (uint32_t)sizeof(temp_fr));
@@ -2645,7 +2645,7 @@ cd_set_fax_config(struct call_desc *cd, uint16_t fax_format,
 static uint16_t
 capi_check_wait_get_cmsg(struct cc_capi_application *p_app, _cmsg *CMSG)
 {
-    struct timeval tv = { /* zero */ };
+    struct timeval tv = { 0, 0};
     uint16_t error;
 
     cc_mutex_assert(&p_app->lock, MA_OWNED);
@@ -3340,7 +3340,7 @@ tcap2cip(uint16_t tcap)
 {
 	int x;
 	
-	for (x = 0; x < sizeof(translate_tcap2cip) / sizeof(translate_tcap2cip[0]); x++) {
+	for (x = 0; x < (int)(sizeof(translate_tcap2cip) / sizeof(translate_tcap2cip[0])); x++) {
 		if (translate_tcap2cip[x].tcap == tcap)
 			return (int)translate_tcap2cip[x].cip;
 	}
@@ -3383,7 +3383,7 @@ cip2tcap(int cip)
 {
 	int x;
 	
-	for (x = 0;x < sizeof(translate_cip2tcap) / sizeof(translate_cip2tcap[0]); x++) {
+	for (x = 0;x < (int)(sizeof(translate_cip2tcap) / sizeof(translate_cip2tcap[0])); x++) {
 		if (translate_cip2tcap[x].cip == (uint16_t)cip)
 			return translate_cip2tcap[x].tcap;
 	}
@@ -4202,7 +4202,7 @@ chan_capi_read_sub(struct call_desc *cd)
 
 	    goto done;
 
-	} else if (len < sizeof(cd->pbx_rd)) {
+	} else if (len < (int)sizeof(cd->pbx_rd)) {
 
 	    goto repeat;
 	}
@@ -6416,11 +6416,11 @@ chan_capi_cmd_call_deflect(struct call_desc *cd, struct call_desc *cd_unknown,
 
 	cd_verbose(cd, 2, 1, 3, "\n");
 
-	if (param_len > (sizeof(fac)-0x0B)) {
+	if (param_len > (int)(sizeof(fac)-0x0B)) {
 	    cd_log(cd, LOG_WARNING, "truncating long deflection "
 		   "number from %d to %d bytes!\n",
 		   param_len, (uint32_t)(sizeof(fac)-0x0B));
-	    param_len = sizeof(fac)-0x0B;
+	    param_len = (int)(sizeof(fac)-0x0B);
 	}
 
 	fac[0] = 0x0A + param_len; /* length */
@@ -6770,7 +6770,7 @@ chan_capi_commands[] = {
 	{ "holdtype",     &chan_capi_cmd_holdtype,        1, 0, 1 },
 	{ "retrieve",     &chan_capi_cmd_retrieve,        1, 0, 0 },
 	{ "ect",          &chan_capi_cmd_ect,             1, 1, 1 },
-	{ NULL, NULL, 0 }
+	{ NULL, NULL, 0, 0, 0}
 };
 
 /*---------------------------------------------------------------------------*
@@ -8371,7 +8371,7 @@ int load_module(void)
 #if (CC_AST_VERSION >= 0x10400)
 static
 #endif
-int unload_module()
+int unload_module(void)
 {
 	uint16_t x;
 
@@ -8460,7 +8460,7 @@ AST_MODULE_INFO(ASTERISK_GPL_KEY, AST_MODFLAG_DEFAULT, CHAN_CAPI_DESC,
 		.unload = &unload_module,
 		.reload = &reload_module);
 #else
-int usecount()
+int usecount(void)
 {
 	struct cc_capi_application *p_app;
 	int cd_root_used = 0;
@@ -8483,13 +8483,13 @@ int usecount()
 	return cd_root_used;
 }
 
-char *description()
+char *description(void)
 {
 	return "Common ISDN API 2.0, CAPI2.0, for Asterisk";
 }
 
 #ifdef ASTERISK_GPL_KEY
-char *key()
+char *key(void)
 {
 	return ASTERISK_GPL_KEY;
 }
