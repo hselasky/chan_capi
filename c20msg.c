@@ -1,5 +1,7 @@
 #include <stdio.h>
-#include <sys/types.h>
+#include <stdint.h>
+
+#include "c20msg.h"
 
 /*
  * decode capi 2.0 info word

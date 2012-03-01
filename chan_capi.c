@@ -71,7 +71,7 @@
 #include <fcntl.h>
 #include <time.h>
 #include <signal.h>
-#include <sys/types.h>
+#include <stdint.h>
 #include <asterisk/dsp.h>
 #include "xlaw.h"
 
@@ -185,7 +185,7 @@ static const uint8_t sending_not_complete_struct[] = { 2, 0, 0 };
 static uint8_t update_use_count = 0;
 
 /* external prototypes */
-extern const char *capi_info_string(uint16_t wInfo);
+#include "c20msg.h"
 
 /*===========================================================================*
  * ring buffer routines
