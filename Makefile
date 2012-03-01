@@ -302,7 +302,7 @@ package:
 		--exclude=".svn" --exclude="*.orig" --exclude="*.rej" \
 		Makefile c20msg.c chan_capi.c chan_capi.h \
 		chan_capi20.h config.h xlaw.h \
-		capi.conf extensions.conf \
+		capi.conf.sample extensions.conf.sample \
 		README CHANGES INSTALL LICENSE
 
 	rm -rf chan_capi-${VERSION}
