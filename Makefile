@@ -90,7 +90,7 @@ SRCS+=	c20msg.c
 SRCS+=	chan_capi.c
 SRCS+=  config.h
 
-FILES+= capi.conf.sample
+FILES+= capi.conf capi.conf.sample
 FILESDIR=${ETCDIR}
 
 CLEANFILES+= config.h
@@ -305,7 +305,8 @@ package:
 		--exclude=".svn" --exclude="*.orig" --exclude="*.rej" \
 		Makefile c20msg.c c20msg.h chan_capi.c chan_capi.h \
 		chan_capi20.h xlaw.h \
-		capi.conf.sample extensions.conf.sample \
+		capi.conf capi.conf.sample \
+		extensions.conf.sample \
 		README CHANGES INSTALL LICENSE
 
 	rm -rf chan_capi-${VERSION}
