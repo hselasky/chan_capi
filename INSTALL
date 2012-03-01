@@ -9,8 +9,8 @@ files.
 
 To build the channel driver on LINUX
 ------------------------------------
-make
-make install
+freebsd-make
+freebsd-make install
 
 # 
 # the following command will install
@@ -21,14 +21,6 @@ make install
 
 To build the channel driver on FreeBSD/NetBSD:
 ----------------------------------------------
-gmake
-gmake install
-
-# 
-# the following command will install
-# the sample configuration files
-#
-# gmake config
-#
-
+make all
+make install
 
