@@ -304,7 +304,7 @@ package:
 	tar -cvf temp.tar --exclude="*~" --exclude="*#" \
 		--exclude=".svn" --exclude="*.orig" --exclude="*.rej" \
 		Makefile c20msg.c chan_capi.c chan_capi.h \
-		chan_capi20.h config.h xlaw.h \
+		chan_capi20.h xlaw.h \
 		capi.conf.sample extensions.conf.sample \
 		README CHANGES INSTALL LICENSE
 
