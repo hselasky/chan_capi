@@ -26,7 +26,7 @@
 # Makefile for Asterisk PBX CAPI channel driver
 #
 
-VERSION=2.0.1
+VERSION=2.0.2
 CONFIGFILE=${.CURDIR}/config.h
 GREP?=grep
 
@@ -90,7 +90,7 @@ SRCS+=	c20msg.c
 SRCS+=	chan_capi.c
 SRCS+=  config.h
 
-FILES+= capi.conf capi.conf.sample
+FILES+= capi.conf.sample
 FILESDIR=${ETCDIR}
 
 CLEANFILES+= config.h
