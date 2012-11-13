@@ -1,5 +1,5 @@
 /*-
- * Copyright (c) 2006-2011 Hans Petter Selasky. All rights reserved.
+ * Copyright (c) 2006-2012 Hans Petter Selasky. All rights reserved.
  * Copyright (C) 2005 Cytronics & Melware, Armin Schindler
  * Copyright (C) 2002-2005 Junghanns.NET GmbH, Klaus-Peter Junghanns
  * 
@@ -357,7 +357,7 @@ strlcat(dst, src, siz)
 static uint32_t
 capi_get_counter(void)
 {
-    static uint32_t count = 0;
+    static uint32_t count;
     uint32_t temp;
     cc_mutex_lock(&capi_global_lock);
     temp = count++;
@@ -1029,9 +1029,8 @@ capi_application_free(struct cc_capi_application *p_app)
     struct call_desc *cd;
     struct call_desc *temp;
 
-    if (p_app == NULL) {
+    if (p_app == NULL)
         return;
-    }
 
     cc_mutex_assert(&do_periodic_lock, MA_OWNED);
 
@@ -1071,6 +1070,9 @@ capi_application_free(struct cc_capi_application *p_app)
     cc_mutex_unlock(&p_app->lock);
 
     capi20_be_free(p_app->cbe_p);
+
+    if (p_app->pbx_chan_temp != NULL)
+	ast_channel_free(p_app->pbx_chan_temp);
 
     free(p_app);
 
@@ -1600,19 +1602,6 @@ pbx_chan_by_plci_on_hold(uint16_t plci)
 static struct call_desc *
 cd_by_pbx_chan(struct ast_channel *pbx_chan)
 {
-#if 0
-
-    /* in the future the PBX should lock our
-     * private lock before calling any callbacks !
-     */
-    struct call_desc *cd = CC_CHANNEL_PVT(pbx_chan);
-
-    cc_mutex_assert(&cd->p_app->lock, MA_OWNED);
-
-    XXX chan_capi_fixup() should use:
-    XXX struct call_desc *cd = CC_CHANNEL_PVT(newchan);
-
-#else
     struct call_desc *cd = NULL;
     struct cc_capi_application *p_app;
     uint16_t n;
@@ -1647,11 +1636,8 @@ cd_by_pbx_chan(struct ast_channel *pbx_chan)
         cc_log(LOG_ERROR, "PBX channel has no interface!\n");
 
     }
-#endif
-
-    return cd;
+    return (cd);
 }
-
 
 /*---------------------------------------------------------------------------*
  *      cd_by_msg_num - find call descriptor by message number
@@ -1837,12 +1823,10 @@ cd_free(struct call_desc *cd, uint8_t hangup_what)
 
     /* close data pipes, if any */
 
-    if (cd->fd[0] > -1) {
+    if (cd->fd[0] > -1)
         close(cd->fd[0]);
-    }
-    if (cd->fd[1] > -1) {
+    if (cd->fd[1] > -1)
         close(cd->fd[1]);
-    }
 
     cd->fd[0] = -1;
     cd->fd[1] = -1;
@@ -1955,11 +1939,37 @@ cd_free(struct call_desc *cd, uint8_t hangup_what)
 	    cd->free_chan = pbx_chan;
 	}
 
-	/* else just wait for "ast_read()" to 
+	/*
+	 * Else just wait for "ast_read()" to 
 	 * return NULL
 	 */
     }
-    return;
+}
+
+/*---------------------------------------------------------------------------*
+ *      cd_alloc_pbx_channel - allocate a new asterisk call descriptor
+ *
+ * This function must be called unlocked.
+ *---------------------------------------------------------------------------*/
+static struct ast_channel *
+cd_alloc_pbx_channel(const char *name, const char *dest)
+{
+    struct ast_channel *pbx_chan;
+
+    /* try to allocate a PBX channel */
+
+#if (CC_AST_VERSION >= 0x10800)
+    pbx_chan = ast_channel_alloc(0, AST_STATE_DOWN, 0, 0, 
+	0, 0, 0, 0, 0, "CAPI/%s/%s-free", name, dest);
+#elif (CC_AST_VERSION >= 0x10403)
+    pbx_chan = ast_channel_alloc(0, 0, 0, 0, 
+	0, 0, 0, 0, "CAPI/%s/%s-free", name, dest);
+#elif (CC_AST_VERSION >= 0x10400)
+    pbx_chan = ast_channel_alloc(0, 0, 0, 0, "");
+#else
+    pbx_chan = ast_channel_alloc(0);
+#endif
+    return (pbx_chan);
 }
 
 /*---------------------------------------------------------------------------*
@@ -1969,12 +1979,13 @@ cd_free(struct call_desc *cd, uint8_t hangup_what)
  * a CAPI application! Upon success, a call descriptor pointer is returned. 
  * Else NULL is returned. This call descriptor pointer must be passed to 
  * "cd_free()" when the call is complete.
+ * If this function returns non-NULL, the asterisk channel pointed to
+ * by the "pbx_chan" argument is taken.
  *---------------------------------------------------------------------------*/
 static struct call_desc *
-cd_alloc(struct cc_capi_application *p_app, 
-    const char *name, const char *dest, uint16_t plci)
+cd_alloc(struct cc_capi_application *p_app,
+    struct ast_channel *pbx_chan, uint16_t plci)
 {
-    struct ast_channel *pbx_chan = NULL;
     struct call_desc *cd = NULL;
     char buffer[16];
     int fds[2] = { 0, 0 };
@@ -1995,7 +2006,7 @@ cd_alloc(struct cc_capi_application *p_app,
 		     "at %d calls/second! (ignored)\n",
 		     p_app->cd_alloc_rate_curr);
 	}
- 	return NULL;
+ 	return (NULL);
     }
 
     /* one more call, means that the call rate will increase */
@@ -2053,21 +2064,6 @@ cd_alloc(struct cc_capi_application *p_app,
     cd->fd[0] = fds[0];
     cd->fd[1] = fds[1];
 
-
-    /* try to allocate a PBX channel */
-
-#if (CC_AST_VERSION >= 0x10800)
-    pbx_chan = ast_channel_alloc(0, 0, 0, 0, 
-	0, 0, 0, 0, 0, "CAPI/%s/%s-%08x", name, dest, (int)(long)cd);
-#elif (CC_AST_VERSION >= 0x10403)
-    pbx_chan = ast_channel_alloc(0, 0, 0, 0, 
-	0, 0, 0, 0, "CAPI/%s/%s-%08x", name, dest, (int)(long)cd);
-#elif (CC_AST_VERSION >= 0x10400)
-    pbx_chan = ast_channel_alloc(0, 0, 0, 0, "");
-#else
-    pbx_chan = ast_channel_alloc(0);
-#endif
-
     if (pbx_chan == NULL) {
         cc_log(LOG_ERROR, "Unable to allocate a PBX channel!\n");
 	goto error;
@@ -2078,7 +2074,11 @@ cd_alloc(struct cc_capi_application *p_app,
 #if (CC_AST_VERSION < 0x10400)
     pbx_chan->type                = chan_capi_pbx_type;
 #endif
+#if (CC_AST_VERSION >= 0x10800)
+    ast_channel_set_fd(pbx_chan, 0, fds[0]);
+#else
     pbx_chan->fds[0]              = fds[0];
+#endif
     CC_CHANNEL_PVT(pbx_chan)      = cd;
 
     cc_mutex_lock(&capi_global_lock);
@@ -2127,7 +2127,7 @@ cd_alloc(struct cc_capi_application *p_app,
     pbx_chan->rawreadformat       = fmt; /* XXX cleanup */
     pbx_chan->rawwriteformat      = fmt; /* XXX cleanup */
 #else
-    if (pbx_chan->pvt) {
+    if (pbx_chan->pvt != NULL) {
         chan_capi_fill_pvt(pbx_chan);
     } else {
         cc_log(LOG_ERROR, "PVT structure not allocated!\n");
@@ -2171,22 +2171,14 @@ cd_alloc(struct cc_capi_application *p_app,
 	snprintf(buffer, sizeof(buffer), "%d", plci);
 	pbx_builtin_setvar_helper(pbx_chan, "PLCI", &buffer[0]);
     }
-    return cd;
+    return (cd);
 
  error:
-
-    if (pbx_chan) {
-        if (cd) {
-	    cd->pbx_chan = NULL;
-	}
-	ast_channel_free(pbx_chan);
-    }
-
-    if(cd) {
+    if(cd != NULL) {
+        cd->pbx_chan = NULL;
         cd_free(cd, 0);
     }
-    return NULL;
-
+    return (NULL);
 }
 
 /*---------------------------------------------------------------------------*
@@ -2362,7 +2354,6 @@ cd_detect_dtmf(struct call_desc *cd, int subclass, const void *__data, int len)
 	}
     }
     cd->last_dtmf_digit = digit;
-    return;
 }
 #endif
 
@@ -2729,6 +2720,13 @@ capi_do_monitor(void *data)
     cc_mutex_lock(&p_app->lock);
 
     while(1) {
+
+	/* check if we need to grab a new PBX channel */
+	if (p_app->pbx_chan_temp == NULL) {
+		cc_mutex_unlock(&p_app->lock);
+		p_app->pbx_chan_temp = cd_alloc_pbx_channel("", "");
+		cc_mutex_lock(&p_app->lock);
+	}
 
         error = capi_check_wait_get_cmsg(p_app, &monCMSG);
 
@@ -3498,7 +3496,7 @@ chan_capi_request(const char *type, const struct ast_codec_pref *formats,
 #endif
 {
 	struct call_desc *cd = NULL;
-	struct ast_channel *pbx_chan = NULL;
+	struct ast_channel *pbx_chan;
 	const char *dest;
 	const char *interface;
 	const char *param;
@@ -3520,7 +3518,7 @@ chan_capi_request(const char *type, const struct ast_codec_pref *formats,
 #ifdef CC_AST_HAVE_TECH_PVT
 		*cause = AST_CAUSE_INVALID_NUMBER_FORMAT;
 #endif
-		return NULL;
+		return (NULL);
 	}
 
 	if (interface[0] == 'g') {
@@ -3538,6 +3536,12 @@ chan_capi_request(const char *type, const struct ast_codec_pref *formats,
 		cc_verbose(1, 1, VERBOSE_PREFIX_4 "capi request for "
 			   "interface '%s'\n", interface);
  	}
+
+	/*
+	 * Allocate a PBX channel before allocating the CAPI channel,
+	 * while unlocked:
+	 */
+	pbx_chan = cd_alloc_pbx_channel(cep->name, dest);
 
 	/* have to lock the CAPI application first! */
 
@@ -3573,9 +3577,8 @@ chan_capi_request(const char *type, const struct ast_codec_pref *formats,
 	    cep = cep->next;
 	}
 
-	if (cep == NULL) {
+	if (cep == NULL)
 	    goto done;
-	}
 
 	if (controller == 0xFF) {
 	    for(controller = 0; 
@@ -3590,32 +3593,23 @@ chan_capi_request(const char *type, const struct ast_codec_pref *formats,
 
 	if (controller < CAPI_MAX_CONTROLLERS) {
 
-	    cd = cd_alloc(p_app, cep->name, dest, controller & 0xFF);
+	    cd = cd_alloc(p_app, pbx_chan, controller & 0xFF);
 
-	    if (cd == NULL) {
+	    if (cd == NULL)
 	        goto done;
- 	    }
 
 	    if (cd_set_cep(cd, cep)) {
 	        cd_free(cd, 2);
 		cd = NULL;
+		pbx_chan = NULL;
 		goto done;
 	    }
 
 	    strlcpy(cd->dst_telno, dest, sizeof(cd->dst_telno));
 
-	    pbx_chan = cd->pbx_chan;
-
 	    /* set default channel name */
-#if (CC_AST_VERSION < 0x10403)
-#if (CC_AST_VERSION >= 0x10400)
-	    ast_string_field_build(pbx_chan, name,
-				   "CAPI/%s/%s", cep->name, dest);
-#else
-	    snprintf(pbx_chan->name, sizeof(pbx_chan->name),
-		     "CAPI/%s/%s", cep->name, dest);
-#endif
-#endif
+	    snprintf(cd->chan_name, sizeof(cd->chan_name),
+	        "CAPI/%s/%s-%08x", cep->name, dest, capi_get_counter());
 	}
 
  done:
@@ -3623,8 +3617,15 @@ chan_capi_request(const char *type, const struct ast_codec_pref *formats,
 	cc_mutex_unlock(&p_app->lock);
 
 	if (cd) {
-	    return pbx_chan;
-	}
+#if (CC_AST_VERSION >= 0x10400)
+		if (cd->chan_name[0] != 0) {
+			ast_change_name(pbx_chan, cd->chan_name);
+			ast_cdr_start(pbx_chan->cdr);
+		}
+#endif
+		return (pbx_chan);
+	} else if (pbx_chan != NULL)
+		ast_channel_free(pbx_chan);
 
 	cc_verbose(2, 0, VERBOSE_PREFIX_3 "didn't find CAPI device "
 		   "for interface '%s' or out of memory!\n", interface);
@@ -4090,7 +4091,7 @@ chan_capi_bridge_sub(struct call_desc *cd0,
 		}
 
 		f = cd_pbx_read((who == pbx_chan0) ? cd0 : cd1,
-				(who == pbx_chan0) ? cd0 : cd1);
+				(who == pbx_chan0) ? cd1 : cd0);
 
 		if (!f || (f->frametype == AST_FRAME_CONTROL)
 		       || (f->frametype == AST_FRAME_DTMF)) {
@@ -4184,18 +4185,12 @@ static struct ast_frame *
 chan_capi_read_sub(struct call_desc *cd)
 {
 	struct ast_frame * p_frame = NULL;
-#if 0
-	struct ast_channel * pbx_chan = cd->pbx_chan;
-#endif
 	int len;
 
-	if (cd->state == CAPI_STATE_ONHOLD) {
-
+	if (cd->state == CAPI_STATE_ONHOLD)
 	    goto done;
-	}
 
  repeat:
-
 	len = read(cd->fd[0], &cd->pbx_rd, sizeof(cd->pbx_rd));
 
 	if (len < 0) {
@@ -4218,10 +4213,9 @@ chan_capi_read_sub(struct call_desc *cd)
 	       cd->tx_queue_len--;
 	    }
 	}
-
+#if 0
 	if ((cd->pbx_rd.frametype == AST_FRAME_DTMF) && 
 	    (FRAME_SUBCLASS(cd->pbx_rd.subclass) == 'f')) {
-#if 0
 	    XXX This code is disabled because calling "ast_async_goto()"
 	    XXX causes locking order reversal.
 	    XXX TODO: Execute this code out of order
@@ -4245,12 +4239,12 @@ chan_capi_read_sub(struct call_desc *cd)
 	    } else {
 	      cc_log(LOG_DEBUG, "Already in a fax extension, not redirecting\n");
 	    }
-#endif
 	}
+#endif
 	p_frame = &cd->pbx_rd;
 
  done:
-	return p_frame;
+	return (p_frame);
 }
 
 /*---------------------------------------------------------------------------*
@@ -4570,9 +4564,8 @@ chan_capi_read(struct ast_channel *pbx_chan)
     struct call_desc *cd = cd_by_pbx_chan(pbx_chan);
     struct ast_frame *p_frame = NULL;
 
-    if (cd == NULL) {
+    if (cd == NULL)
         goto done;
-    }
 
     cd_verbose(cd, 5, 1, 2, "\n");
 
@@ -4583,8 +4576,7 @@ chan_capi_read(struct ast_channel *pbx_chan)
     cd_unlock(cd);
 
  done:
-
-    return p_frame;
+    return (p_frame);
 }
 
 /*---------------------------------------------------------------------------*
@@ -4784,7 +4776,6 @@ handle_info_disconnect(_cmsg *CMSG, struct call_desc *cd)
 
 		capi_send_disconnect_req(cd);
 	}
-	return;
 }
 
 static uint16_t
@@ -5709,13 +5700,8 @@ cd_copy_telno_ext(struct call_desc *cd, const char *exten)
 
         strlcpy(pbx_chan->exten, exten, sizeof(pbx_chan->exten));
 
-#if (CC_AST_VERSION >= 0x10400)
-	ast_string_field_build(pbx_chan, name, "CAPI/%s/%s-%x",
-			       cep->name, cd->dst_telno, capi_get_counter());
-#else
-	snprintf(pbx_chan->name, sizeof(pbx_chan->name), "CAPI/%s/%s-%x",
-		 cep->name, cd->dst_telno, capi_get_counter());
-#endif
+	snprintf(cd->chan_name, sizeof(cd->chan_name), "CAPI/%s/%s-%08x",
+	    cep->name, cd->dst_telno, capi_get_counter());
 
 	strlcpy(src_telno, cd->src_telno, sizeof(src_telno));
 
@@ -5768,7 +5754,6 @@ cd_copy_telno_ext(struct call_desc *cd, const char *exten)
 #endif
 #endif
     }
-    return;
 }
 
 /* check if the there is an extension for this call in the PBX */
@@ -5790,6 +5775,10 @@ cd_start_pbx(struct call_desc **pp_cd, const char *exten)
 
 	cd_copy_telno_ext(cd, exten);
 
+#if (CC_AST_VERSION >= 0x10400)
+	if (cd->chan_name[0] != 0)
+		ast_change_name(pbx_chan, cd->chan_name);
+#endif
 	ast_setstate(pbx_chan, AST_STATE_RING);
 
 	if (ast_pbx_start(cd->pbx_chan)) {
@@ -5824,8 +5813,6 @@ cd_start_pbx(struct call_desc **pp_cd, const char *exten)
 	cd_free(cd, 1);
 	cd = NULL;
 	pp_cd[0] = cd;
-
-	return;
 }
 
 /*
@@ -5956,8 +5943,6 @@ capi_handle_connect_indication(_cmsg *CMSG, struct call_desc **pp_cd)
 	}
 
 	/* else wait for the periodic thread to handle it ... */
-
-	return;
 }
 
 /*
@@ -6162,11 +6147,13 @@ capi_handle_cmsg(struct cc_capi_application *p_app, _cmsg *CMSG)
 	        goto done;
 	    }
 
-	    cd = cd_alloc(p_app, "", "", PLCI);
+	    cd = cd_alloc(p_app, p_app->pbx_chan_temp, PLCI);
 
 	    if (cd == NULL) {
 	        /* requested circuit channel not available */
 	        capi_send_connect_resp_app(p_app, wMsgNum, PLCI, 0x0004);
+	    } else {
+		p_app->pbx_chan_temp = NULL;
 	    }
 
 	} else if (wCmd == CAPI_P_CONF(CONNECT)) {

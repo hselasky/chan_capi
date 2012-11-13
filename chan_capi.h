@@ -543,6 +543,10 @@ struct call_desc {
 	 */
 	uint16_t dst_strip_len;
 
+	/*! Channel name
+	 */
+	char chan_name[AST_MAX_EXTENSION];
+
 	/*! CAPI transmit queue length */
 	uint16_t tx_queue_len;
 
@@ -621,6 +625,8 @@ struct cc_capi_application {
 	 *  all associated call descriptors:
 	 */
 	ast_mutex_t lock;
+
+	struct ast_channel *pbx_chan_temp;
 
 	/*! CAPI application ID */
 	uint32_t application_id;
