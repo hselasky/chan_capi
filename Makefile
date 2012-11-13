@@ -274,7 +274,7 @@ config.h: ${.CURDIR}/Makefile
 	echo "#define CC_AST_VERSION __CC_AST_VERSION(0x,ASTERISK_VERSION_NUM)" >> ${CONFIGFILE} ; \
 	echo " * Found: Asterisk version 1.2.x" ; \
 	)) || ( \
-	((${GREP} -q "ASTERISK_VERSION_NUM.*1001" ${INCLUDEDIR}/asterisk/version.h) && ( \
+	((${GREP} -q "ASTERISK_VERSION_NUM[ 	]*10" ${INCLUDEDIR}/asterisk/version.h) && ( \
 	echo "#define CC_AST_VERSION __CC_AST_VERSION(0x,ASTERISK_VERSION_NUM)" >> ${CONFIGFILE} ; \
 	echo " * Found: Asterisk version 10.1.x" ; \
 	)) || ( \
