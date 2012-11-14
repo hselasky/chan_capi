@@ -1936,6 +1936,9 @@ cd_free(struct call_desc *cd, uint8_t hangup_what)
 	}
 
 	if (hangup_what & 2) {
+	    /* channel is already hung up - clear PVT */
+	    CC_CHANNEL_PVT(pbx_chan) = NULL;
+	    /* set channel to free */
 	    cd->free_chan = pbx_chan;
 	}
 
