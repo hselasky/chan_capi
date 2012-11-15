@@ -1071,8 +1071,11 @@ capi_application_free(struct cc_capi_application *p_app)
 
     capi20_be_free(p_app->cbe_p);
 
-    if (p_app->pbx_chan_temp != NULL)
+    if (p_app->pbx_chan_temp != NULL) {
+	/* channel is already hung up - clear PVT */
+	CC_CHANNEL_PVT(p_app->pbx_chan_temp) = NULL;
 	ast_channel_free(p_app->pbx_chan_temp);
+    }
 
     free(p_app);
 
@@ -1936,8 +1939,6 @@ cd_free(struct call_desc *cd, uint8_t hangup_what)
 	}
 
 	if (hangup_what & 2) {
-	    /* channel is already hung up - clear PVT */
-	    CC_CHANNEL_PVT(pbx_chan) = NULL;
 	    /* set channel to free */
 	    cd->free_chan = pbx_chan;
 	}
@@ -3627,8 +3628,11 @@ chan_capi_request(const char *type, const struct ast_codec_pref *formats,
 		}
 #endif
 		return (pbx_chan);
-	} else if (pbx_chan != NULL)
+	} else if (pbx_chan != NULL) {
+		/* channel is already hung up - clear PVT */
+		CC_CHANNEL_PVT(pbx_chan) = NULL;
 		ast_channel_free(pbx_chan);
+	}
 
 	cc_verbose(2, 0, VERBOSE_PREFIX_3 "didn't find CAPI device "
 		   "for interface '%s' or out of memory!\n", interface);
@@ -7007,6 +7011,8 @@ do_periodic(void *data)
 			    cc_verbose(3, 0, VERBOSE_PREFIX_4 
 				       "Out of order channel free, "
 				       "pbx_chan=%p\n", pbx_chan);
+			    /* channel is already hung up - clear PVT */
+			    CC_CHANNEL_PVT(pbx_chan) = NULL;
 			    ast_channel_free(pbx_chan);
 			    cc_mutex_lock(&p_app->lock);
 			    goto repeat;
