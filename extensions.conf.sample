@@ -104,7 +104,10 @@
 ;
 ; Call Deflection, forward an unanswerd call to another number:
 ;
-; exten => s,1,capiCommand(deflect|12345678)
+; exten => s,1,Ringing
+; exten => s,2,capiCommand(deflect|12345678)
+; exten => s,3,Wait(2)
+; exten => s,4,Hangup()
 ;
 ;
 ; Set holdtype. When the PBX wants to put the call on hold, 
