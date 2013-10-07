@@ -278,8 +278,15 @@ config.h: ${.CURDIR}/Makefile
 	echo "#define CC_AST_VERSION __CC_AST_VERSION(0x,ASTERISK_VERSION_NUM)" >> ${CONFIGFILE} ; \
 	echo " * Found: Asterisk version 10.1.x" ; \
 	)) || ( \
+	(([ -f ${INCLUDEDIR}/asterisk/ast_version.h ] && ( \
+	echo "#define CC_AST_VERSION __CC_AST_VERSION(0x,110000)" >> ${CONFIGFILE} ; \
+	echo "#define CC_AST_NO_VERSION" >> ${CONFIGFILE} ; \
+	echo " * Found: Asterisk version 11.1.x or compatible" ; \
+	)) || ( \
 	echo " * Not Found: Asterisk version" ; \
 	exit 1 ; \
+	) \
+	) \
 	) \
 	) \
 	) \
@@ -287,7 +294,9 @@ config.h: ${.CURDIR}/Makefile
 	)
 
 .if exists(${INCLUDEDIR}/asterisk/version.h)
+	@echo "#ifndef CC_AST_NO_VERSION" >> ${CONFIGFILE}
 	@echo "#include <asterisk/version.h>" >> ${CONFIGFILE}
+	@echo "#endif" >> ${CONFIGFILE}
 	@echo " * Found: version.h"
 .else
 	@echo " * Not found: version.h"

@@ -78,7 +78,7 @@ struct ring_buffer {
 	     __PRETTY_FUNCTION__, __LINE__, \
 	     (((cd) && (cd)->cep) ? (const char *)(cd)->cep->name : \
 	      (const char *)""), ((cd) ? (cd)->msg_plci : 0), \
-	     (((cd) && (cd)->pbx_chan) ? (const char *)(cd)->pbx_chan->name : \
+	     (((cd) && (cd)->pbx_chan) ? (const char *)CC_CHANNEL_NAME((cd)->pbx_chan) : \
 	      (const char *)"") ,## __VA_ARGS__)
 
 /*
@@ -100,10 +100,58 @@ struct ring_buffer {
 /*
  * definitions for compatibility with older versions of ast*
  */
-#ifdef CC_AST_HAVE_TECH_PVT
-#define CC_CHANNEL_PVT(c) (c)->tech_pvt
+#if (CC_AST_VERSION >= 0x110000)
+#define CC_CHANNEL_NAME(chan) ast_channel_name(chan)
+#define	CC_CHANNEL_PVT(c) ast_channel_tech_pvt(c)
+#define	CC_CHANNEL_SET_PVT(c,x) ast_channel_tech_pvt_set((c), (x))
+#define	CC_CHANNEL_HANGUPCAUSE(c) ast_channel_hangupcause(c)
+#define	CC_CHANNEL_SET_HANGUPCAUSE(c,v) ast_channel_hangupcause_set(c,v)
+#define	CC_CHANNEL_RINGS(c) ast_channel_rings(c)
+#define	CC_CHANNEL_SET_RINGS(c,v) ast_channel_rings_set(c,v)
+#define	CC_CHANNEL_CONTEXT(c) ast_channel_context(c)
+#define	CC_CHANNEL_NATIVEFORMATS(c) ast_channel_nativeformats(c)
+#define	CC_CHANNEL_PBX(c) ast_channel_pbx(c)
+
+#define	CC_CHANNEL_SET_NATIVEFORMATS(c,v) ast_channel_nativeformats_set(c,v)
+#define	CC_CHANNEL_SET_CALLGROUP(c,x) ast_channel_callgroup_set(c,x)
+#define	CC_CHANNEL_SET_CONTEXT(c,x) ast_channel_context_set(c,x)
+#define	CC_CHANNEL_SET_ACCOUNTCODE(c,x) ast_channel_accountcode_set(c,x)
+#define	CC_CHANNEL_SET_LANGUAGE(c,x) ast_channel_language_set(c,x)
 #else
-#define CC_CHANNEL_PVT(c) (c)->pvt->pvt
+
+#ifdef CC_AST_HAVE_TECH_PVT
+#define	CC_CHANNEL_PVT(c) (c)->tech_pvt
+#else
+#define	CC_CHANNEL_PVT(c) (c)->pvt->pvt
+#endif
+
+#define	CC_CHANNEL_NAME(chan) ((chan)->name)
+
+#define	CC_CHANNEL_HANGUPCAUSE(c) (c)->hangupcause
+#define	CC_CHANNEL_RINGS(c) (c)->rings
+#define	CC_CHANNEL_NATIVEFORMATS(c) (c)->nativeformats
+#define	CC_CHANNEL_CALLGROUP(c) (c)->callgroup
+#define	CC_CHANNEL_CONTEXT(c) (c)->context
+#define	CC_CHANNEL_PBX(c) (c)->pbx
+
+#define	CC_CHANNEL_SET_PVT(c,x) CC_CHANNEL_PVT(c) = (x)
+#define	CC_CHANNEL_SET_HANGUPCAUSE(c,x) CC_CHANNEL_HANGUPCAUSE(c) = (x)
+#define	CC_CHANNEL_SET_RINGS(c,x) CC_CHANNEL_RINGS(c) = (x)
+#define	CC_CHANNEL_SET_NATIVEFORMATS(c,x) CC_CHANNEL_NATIVEFORMATS(c) = (x)
+#define	CC_CHANNEL_SET_CALLGROUP(c,x) CC_CHANNEL_CALLGROUP(c) = (x)
+#define	CC_CHANNEL_SET_CONTEXT(c,x) strlcpy(CC_CHANNEL_CONTEXT(c), (x), sizeof(CC_CHANNEL_CONTEXT(c)))
+
+#if (CC_AST_VERSION >= 0x10400)
+#define	CC_CHANNEL_SET_ACCOUNTCODE(c,x) \
+	ast_string_field_set((c), accountcode, (x));
+#define	CC_CHANNEL_SET_LANGUAGE(c,x) \
+	ast_string_field_set((c), language, (x));
+#else
+#define	CC_CHANNEL_SET_ACCOUNTCODE(c,x) \
+	strlcpy((c)->accountcode, (x), sizeof((c)->accountcode));
+#define	CC_CHANNEL_SET_LANGUAGE(c,x) \
+	strlcpy((c)->language, (x), sizeof((c)->language));
+#endif
 #endif
 
 #ifdef CC_AST_HAS_BRIDGED_CHANNEL

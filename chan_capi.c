@@ -1073,7 +1073,7 @@ capi_application_free(struct cc_capi_application *p_app)
 
     if (p_app->pbx_chan_temp != NULL) {
 	/* channel is already hung up - clear PVT */
-	CC_CHANNEL_PVT(p_app->pbx_chan_temp) = NULL;
+	CC_CHANNEL_SET_PVT(p_app->pbx_chan_temp, NULL);
 	ast_channel_free(p_app->pbx_chan_temp);
     }
 
@@ -1920,17 +1920,18 @@ cd_free(struct call_desc *cd, uint8_t hangup_what)
 
 	    ast_setstate(pbx_chan, AST_STATE_DOWN);
 
-	    pbx_chan->hangupcause =
+	    CC_CHANNEL_SET_HANGUPCAUSE(pbx_chan,
 	      ((wCause_in & 0xFF00) == 0x3400) ?
-	      (wCause_in & 0x7F) : AST_CAUSE_NORMAL_CLEARING;
+	      (wCause_in & 0x7F) : AST_CAUSE_NORMAL_CLEARING);
 
 	    /* register when alert was received */
 	    if (cd->alert_received) {
-	        pbx_chan->rings =
-	             (uint32_t)(cd->p_app->application_uptime -
-				cd->alert_time_last);
-		if (pbx_chan->rings == 0)
-			pbx_chan->rings = 1;
+		uint32_t rings;
+		rings = cd->p_app->application_uptime -
+		    cd->alert_time_last;
+		if (rings == 0)
+			rings = 1;
+		CC_CHANNEL_SET_RINGS(pbx_chan, rings);
 	    }
 	}
 
@@ -2083,7 +2084,7 @@ cd_alloc(struct cc_capi_application *p_app,
 #else
     pbx_chan->fds[0]              = fds[0];
 #endif
-    CC_CHANNEL_PVT(pbx_chan)      = cd;
+    CC_CHANNEL_SET_PVT(pbx_chan, cd);
 
     cc_mutex_lock(&capi_global_lock);
     fmt = capi_global.capability;
@@ -2093,22 +2094,29 @@ cd_alloc(struct cc_capi_application *p_app,
 
 #if (CC_AST_VERSION >= 0x100100)
     ast_format_set(&ast_fmt, fmt, 0);
-    ast_format_cap_add(pbx_chan->nativeformats, &ast_fmt);
+    ast_format_cap_add(CC_CHANNEL_NATIVEFORMATS(pbx_chan), &ast_fmt);
 #else
 #ifdef CC_OLD_CODEC_FORMATS
-    pbx_chan->nativeformats       = fmt;
+    CC_CHANNEL_SET_NATIVEFORMATS(pbx_chan, fmt);
 #else
-    ast_codec_pref_init(&pbx_chan->nativeformats);
-    ast_codec_pref_append(&pbx_chan->nativeformats, fmt);
+    ast_codec_pref_init(&CC_CHANNEL_NATIVEFORMATS(pbx_chan));
+    ast_codec_pref_append(&CC_CHANNEL_NATIVEFORMATS(pbx_chan), fmt);
 #endif
 #endif
 
 #if (CC_AST_VERSION >= 0x100100)
-    ast_best_codec(pbx_chan->nativeformats, &ast_fmt);
+    ast_best_codec(CC_CHANNEL_NATIVEFORMATS(pbx_chan), &ast_fmt);
 #else
     fmt = ast_best_codec(fmt);
 #endif
 
+#if (CC_AST_VERSION >= 0x110000)
+    ast_channel_tech_set(pbx_chan, &chan_capi_tech);
+    ast_format_copy(ast_channel_writeformat(pbx_chan), &ast_fmt);
+    ast_format_copy(ast_channel_rawwriteformat(pbx_chan), &ast_fmt);
+    ast_format_copy(ast_channel_readformat(pbx_chan), &ast_fmt);
+    ast_format_copy(ast_channel_rawreadformat(pbx_chan), &ast_fmt);
+#else
 #if (CC_AST_VERSION >= 0x100100)
     pbx_chan->tech = &chan_capi_tech;
     ast_format_copy(&pbx_chan->writeformat, &ast_fmt);
@@ -2139,6 +2147,7 @@ cd_alloc(struct cc_capi_application *p_app,
     }
     pbx_chan->pvt->rawreadformat  = fmt; /* XXX cleanup */
     pbx_chan->pvt->rawwriteformat = fmt; /* XXX cleanup */
+#endif
 #endif
 #endif
 
@@ -2233,23 +2242,11 @@ cd_set_cep(struct call_desc *cd, struct config_entry_iface *cep)
 
     /* configure PBX channel, if present */
 
-    if(pbx_chan && (cd->flags.dir_outgoing == 0)) {
-
-	  pbx_chan->callgroup = cep->call_group;
-
-	  strlcpy(pbx_chan->context, cep->context, 
-		  sizeof(pbx_chan->context));
-
-#if (CC_AST_VERSION >= 0x10400)
-	  ast_string_field_set(pbx_chan, accountcode, cep->accountcode);
-	  ast_string_field_set(pbx_chan, language, cep->language);
-#else
-	  strlcpy(pbx_chan->accountcode, cep->accountcode, 
-		  sizeof(pbx_chan->accountcode));
-
-	  strlcpy(pbx_chan->language, cep->language, 
-		  sizeof(pbx_chan->language));
-#endif
+    if (pbx_chan != NULL && (cd->flags.dir_outgoing == 0)) {
+	  CC_CHANNEL_SET_CALLGROUP(pbx_chan, cep->call_group);
+	  CC_CHANNEL_SET_CONTEXT(pbx_chan, cep->context);
+	  CC_CHANNEL_SET_ACCOUNTCODE(pbx_chan, cep->accountcode);
+	  CC_CHANNEL_SET_LANGUAGE(pbx_chan, cep->language);
     }
 
     /* configure DSP, if present */
@@ -2391,7 +2388,7 @@ cd_send_pbx_voice(struct call_desc *cd, const void *data_ptr, uint32_t data_len)
 
     if (cd->fd[1] == -1) {
         cc_log(LOG_ERROR, "No pipe for %s\n",
-	       pbx_chan->name);
+	       CC_CHANNEL_NAME(pbx_chan));
 	return -1;
     }
 
@@ -2448,7 +2445,7 @@ cd_send_pbx_frame(struct call_desc *cd, int frametype, int subclass,
 
     if (cd->fd[1] == -1) {
         cc_log(LOG_ERROR, "No pipe for %s\n",
-	       pbx_chan->name);
+	       CC_CHANNEL_NAME(pbx_chan));
 	return -1;
     }
 
@@ -2514,7 +2511,7 @@ cd_handle_dst_telno(struct call_desc *cd, const uint8_t *p_dst_telno)
 
     cd->digit_time_last = cd->p_app->application_uptime;
 
-    if (cd->pbx_chan->pbx) {
+    if (CC_CHANNEL_PBX(cd->pbx_chan) != NULL) {
 
         /* the PBX has been started. Forward the digits as DTMF */
 
@@ -3061,7 +3058,7 @@ capi_send_alert_req(struct call_desc *cd, uint8_t flag)
         cd->state = CAPI_STATE_ALERTING;
 
 	if (cd->pbx_chan->_state == AST_STATE_RING) {
-	    cd->pbx_chan->rings = 1;
+		CC_CHANNEL_SET_RINGS(cd->pbx_chan, 1);
 	}
     }
     return __capi_put_cmsg(cd->p_app, &CMSG);
@@ -3630,7 +3627,7 @@ chan_capi_request(const char *type, const struct ast_codec_pref *formats,
 		return (pbx_chan);
 	} else if (pbx_chan != NULL) {
 		/* channel is already hung up - clear PVT */
-		CC_CHANNEL_PVT(pbx_chan) = NULL;
+		CC_CHANNEL_SET_PVT(pbx_chan, NULL);
 		ast_channel_free(pbx_chan);
 	}
 
@@ -4229,16 +4226,16 @@ chan_capi_read_sub(struct call_desc *cd)
 
 	    if (strcmp(pbx_chan->exten, "fax")) {
 	      if (ast_exists_extension(pbx_chan, ast_strlen_zero(pbx_chan->macrocontext) ? 
-				       pbx_chan->context : pbx_chan->macrocontext, 
+				       CC_CHANNEL_CONTEXT(pbx_chan) : pbx_chan->macrocontext, 
 				       "fax", 1, cd->src_telno)) {
 
 		cd_verbose(cd, 2, 0, 3, "Redirecting to fax extension\n");
 
 		/* save the DID/DNIS when we transfer the fax call to a "fax" extension */
 		pbx_builtin_setvar_helper(pbx_chan, "FAXEXTEN", pbx_chan->exten);
-		if (ast_async_goto(pbx_chan, pbx_chan->context, "fax", 1)) {
+		if (ast_async_goto(pbx_chan, CC_CHANNEL_CONTEXT(pbx_chan), "fax", 1)) {
 		  cc_log(LOG_WARNING, "Failed to async goto '%s' "
-			 "into fax of '%s'\n", pbx_chan->name, pbx_chan->context);
+			 "into fax of '%s'\n", CC_CHANNEL_NAME(pbx_chan), CC_CHANNEL_CONTEXT(pbx_chan));
 		}
 	      } else {
 		cd_verbose(cd, 3, 0, 3, "Fax detected, but no fax extension\n");
@@ -4528,7 +4525,7 @@ chan_capi_hangup(struct ast_channel *pbx_chan)
     if (cd == NULL) {
 
         /* clear pointer to PVT */
-        CC_CHANNEL_PVT(pbx_chan) = NULL;
+	CC_CHANNEL_SET_PVT(pbx_chan, NULL);
 	return 0;
     }
 
@@ -4541,7 +4538,7 @@ chan_capi_hangup(struct ast_channel *pbx_chan)
     /* get the hangup cause */
 
     cd->wCause_out =
-      (((cause) ? atoi(cause) : pbx_chan->hangupcause) & 0x7F) | 0x3480;
+      (((cause) ? atoi(cause) : CC_CHANNEL_HANGUPCAUSE(pbx_chan)) & 0x7F) | 0x3480;
 
     /* call descriptor is still valid */
 
@@ -4552,7 +4549,7 @@ chan_capi_hangup(struct ast_channel *pbx_chan)
      * this call descriptor will see that 
      * the call is gone, and not continue:
      */
-    CC_CHANNEL_PVT(pbx_chan) = NULL;
+    CC_CHANNEL_SET_PVT(pbx_chan, NULL);
 
     cd_unlock(cd);
 
@@ -4696,11 +4693,11 @@ capi_handle_dtmf_fax(struct call_desc *cd)
 		return;
 	}
 
-	if (!ast_exists_extension(pbx_chan, pbx_chan->context, "fax", 1, 
+	if (!ast_exists_extension(pbx_chan, CC_CHANNEL_CONTEXT(pbx_chan), "fax", 1, 
 				  cd->src_telno)) {
 		cc_verbose(3, 0, VERBOSE_PREFIX_3 "Fax tone detected, "
 			   "but no fax extension for %s\n", 
-			   pbx_chan->name);
+			   CC_CHANNEL_NAME(pbx_chan));
 		return;
 	}
 
@@ -4710,10 +4707,10 @@ capi_handle_dtmf_fax(struct call_desc *cd)
 	/* Save the DID/DNIS when we transfer the fax call to a "fax" extension */
 	pbx_builtin_setvar_helper(pbx_chan, "FAXEXTEN", pbx_chan->exten);
 	
-	if (ast_async_goto(pbx_chan, pbx_chan->context, "fax", 1)) {
+	if (ast_async_goto(pbx_chan, CC_CHANNEL_CONTEXT(pbx_chan), "fax", 1)) {
 	    cc_log(LOG_WARNING, "Failed to async goto '%s' "
-		   "into fax of '%s'\n", pbx_chan->name, 
-		   pbx_chan->context);
+		   "into fax of '%s'\n", CC_CHANNEL_NAME(pbx_chan), 
+		   CC_CHANNEL_CONTEXT(pbx_chan));
 	}
 	return;
 }
@@ -4724,7 +4721,7 @@ capi_handle_dtmf_fax(struct call_desc *cd)
 static uint16_t
 cd_send_pbx_cause_control(struct call_desc *cd, uint8_t control)
 {
-	int cause = cd->pbx_chan->hangupcause;
+	int cause = CC_CHANNEL_HANGUPCAUSE(cd->pbx_chan);
 
 	if (control) {
 
@@ -7012,7 +7009,7 @@ do_periodic(void *data)
 				       "Out of order channel free, "
 				       "pbx_chan=%p\n", pbx_chan);
 			    /* channel is already hung up - clear PVT */
-			    CC_CHANNEL_PVT(pbx_chan) = NULL;
+			    CC_CHANNEL_SET_PVT(pbx_chan, NULL);
 			    ast_channel_free(pbx_chan);
 			    cc_mutex_lock(&p_app->lock);
 			    goto repeat;
@@ -7359,7 +7356,7 @@ chan_capi_get_info(int fd, int argc, char *argv[])
 		    }
 
 		    ast_cli(fd, "    %s: %s->%s, 0x%04x, %s\n",
-			    cd->pbx_chan ? cd->pbx_chan->name : "<no PBX channel>",
+			    cd->pbx_chan ? CC_CHANNEL_NAME(cd->pbx_chan) : "<no PBX channel>",
 			    cd->src_telno, cd->dst_telno,
 			    cd->msg_plci, cd->flags.dir_outgoing ? "out" : "in");
 		}
