@@ -1,6 +1,6 @@
 /*-
  *
- * Copyright (c) 2006 Hans Petter Selasky. All rights reserved.
+ * Copyright (c) 2006,2013 Hans Petter Selasky. All rights reserved.
  * Copyright (c) 2005 Cytronics & Melware, Armin Schindler
  * Copyright (c) 2002-2005 Junghanns.NET GmbH, Klaus-Peter Junghanns
  * 
@@ -111,12 +111,18 @@ struct ring_buffer {
 #define	CC_CHANNEL_CONTEXT(c) ast_channel_context(c)
 #define	CC_CHANNEL_NATIVEFORMATS(c) ast_channel_nativeformats(c)
 #define	CC_CHANNEL_PBX(c) ast_channel_pbx(c)
+#define	CC_CHANNEL_STATE(c) ast_channel_state(c)
+#define	CC_CHANNEL_CDR(c) ast_channel_cdr(c)
+#define	CC_CHANNEL_EXTEN(c) ast_channel_exten(c)
 
 #define	CC_CHANNEL_SET_NATIVEFORMATS(c,v) ast_channel_nativeformats_set(c,v)
 #define	CC_CHANNEL_SET_CALLGROUP(c,x) ast_channel_callgroup_set(c,x)
 #define	CC_CHANNEL_SET_CONTEXT(c,x) ast_channel_context_set(c,x)
 #define	CC_CHANNEL_SET_ACCOUNTCODE(c,x) ast_channel_accountcode_set(c,x)
 #define	CC_CHANNEL_SET_LANGUAGE(c,x) ast_channel_language_set(c,x)
+#define	CC_CHANNEL_SET_EXTEN(c,v) ast_channel_exten_set(c,v)
+#define	CC_CHANNEL_SET_PRIORITY(c,v) ast_channel_priority_set(c,v)
+#define	CC_CHANNEL_SET_FLAG(c,v) ast_set_flag(ast_channel_flags(c),(v))
 #else
 
 #ifdef CC_AST_HAVE_TECH_PVT
@@ -126,13 +132,15 @@ struct ring_buffer {
 #endif
 
 #define	CC_CHANNEL_NAME(chan) ((chan)->name)
-
 #define	CC_CHANNEL_HANGUPCAUSE(c) (c)->hangupcause
 #define	CC_CHANNEL_RINGS(c) (c)->rings
 #define	CC_CHANNEL_NATIVEFORMATS(c) (c)->nativeformats
 #define	CC_CHANNEL_CALLGROUP(c) (c)->callgroup
 #define	CC_CHANNEL_CONTEXT(c) (c)->context
 #define	CC_CHANNEL_PBX(c) (c)->pbx
+#define	CC_CHANNEL_STATE(c) (c)->_state
+#define	CC_CHANNEL_CDR(c) (c)->cdr
+#define	CC_CHANNEL_EXTEN(c) (c)->exten
 
 #define	CC_CHANNEL_SET_PVT(c,x) CC_CHANNEL_PVT(c) = (x)
 #define	CC_CHANNEL_SET_HANGUPCAUSE(c,x) CC_CHANNEL_HANGUPCAUSE(c) = (x)
@@ -140,6 +148,9 @@ struct ring_buffer {
 #define	CC_CHANNEL_SET_NATIVEFORMATS(c,x) CC_CHANNEL_NATIVEFORMATS(c) = (x)
 #define	CC_CHANNEL_SET_CALLGROUP(c,x) CC_CHANNEL_CALLGROUP(c) = (x)
 #define	CC_CHANNEL_SET_CONTEXT(c,x) strlcpy(CC_CHANNEL_CONTEXT(c), (x), sizeof(CC_CHANNEL_CONTEXT(c)))
+#define	CC_CHANNEL_SET_EXTEN(c,x) strlcpy(CC_CHANNEL_EXTEN(c), (x), sizeof(CC_CHANNEL_EXTEN(c)))
+#define	CC_CHANNEL_SET_PRIORITY(c,x) (c)->priority = (x)
+#define	CC_CHANNEL_SET_FLAG(c,v) ast_set_flag(c,v)
 
 #if (CC_AST_VERSION >= 0x10400)
 #define	CC_CHANNEL_SET_ACCOUNTCODE(c,x) \

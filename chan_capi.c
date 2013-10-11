@@ -1,5 +1,5 @@
 /*-
- * Copyright (c) 2006-2012 Hans Petter Selasky. All rights reserved.
+ * Copyright (c) 2006-2013 Hans Petter Selasky. All rights reserved.
  * Copyright (C) 2005 Cytronics & Melware, Armin Schindler
  * Copyright (C) 2002-2005 Junghanns.NET GmbH, Klaus-Peter Junghanns
  * 
@@ -3057,7 +3057,7 @@ capi_send_alert_req(struct call_desc *cd, uint8_t flag)
 
         cd->state = CAPI_STATE_ALERTING;
 
-	if (cd->pbx_chan->_state == AST_STATE_RING) {
+	if (CC_CHANNEL_STATE(cd->pbx_chan) == AST_STATE_RING) {
 		CC_CHANNEL_SET_RINGS(cd->pbx_chan, 1);
 	}
     }
@@ -3474,10 +3474,13 @@ parse_dialstring(char *buffer, const char **interface, const char **dest,
  * Prepare an outgoing call
  *---------------------------------------------------------------------------*/
 static struct ast_channel *
+#if (CC_AST_VERSION >= 0x110000)
+chan_capi_request(const char *type, struct ast_format_cap *format,
+    const struct ast_channel *requestor, const char *data, int *cause)
+#else
 #if (CC_AST_VERSION >= 0x100100)
 chan_capi_request(const char *type, struct ast_format_cap *format,
     const struct ast_channel *requestor, void *data, int *cause)
-
 #else
 #if (CC_AST_VERSION >= 0x10800)
 chan_capi_request(const char *type, format_t format,
@@ -3492,6 +3495,7 @@ chan_capi_request(char *type, int format, void *data)
 #else
 chan_capi_request(const char *type, const struct ast_codec_pref *formats, 
 		  void *data, int *cause)
+#endif
 #endif
 #endif
 #endif
@@ -3621,7 +3625,7 @@ chan_capi_request(const char *type, const struct ast_codec_pref *formats,
 #if (CC_AST_VERSION >= 0x10400)
 		if (cd->chan_name[0] != 0) {
 			ast_change_name(pbx_chan, cd->chan_name);
-			ast_cdr_start(pbx_chan->cdr);
+			ast_cdr_start(CC_CHANNEL_CDR(pbx_chan));
 		}
 #endif
 		return (pbx_chan);
@@ -3733,8 +3737,18 @@ chan_capi_call_sub(struct call_desc *cd, const char *idest, int timeout)
 	(AST_PRES_RESERVED != 0x60)
 #error "Please check the defined AST_PRES_XXX!"
 #endif
+#if (CC_AST_VERSION >= 0x110000)
+	if (1) {
+		struct ast_party_connected_line *pconn = 
+		    ast_channel_connected(pbx_chan);
+
+		CLIR = pconn->id.number.presentation;
+		callernplan = pconn->id.number.plan;
+	}
+#else
 	CLIR = pbx_chan->connected.id.number.presentation;
 	callernplan = pbx_chan->connected.id.number.plan;
+#endif
 #else
 #ifdef CC_AST_CHANNEL_HAS_CID
 	CLIR = pbx_chan->cid.cid_pres;
@@ -3753,16 +3767,23 @@ chan_capi_call_sub(struct call_desc *cd, const char *idest, int timeout)
 		   cd->flags.b3_on_alert ? "early-B3 on alert" : " ",
 		   sending_complete ? "" : " not", CLIR, callernplan);
 
+	CONNECT_REQ_HEADER(&CMSG, cd->p_app->application_id, cd->msg_num, cd->msg_plci);
+
+#if (CC_AST_VERSION >= 0x110000)
+	/* set FD for PBX */
+	ast_channel_fdno_set(pbx_chan, cd->fd[0]);
+	/* set transfer capability */
+	CONNECT_REQ_CIPVALUE(&CMSG) = tcap2cip(ast_channel_transfercapability(pbx_chan));
+#else
 	/* set FD for PBX */
 	pbx_chan->fds[0] = cd->fd[0];
-
-	CONNECT_REQ_HEADER(&CMSG, cd->p_app->application_id, cd->msg_num, cd->msg_plci);
+	/* set transfer capability */
 #ifdef CC_AST_CHANNEL_HAS_TRANSFERCAP
 	CONNECT_REQ_CIPVALUE(&CMSG) = tcap2cip(pbx_chan->transfercapability);
 #else
 	CONNECT_REQ_CIPVALUE(&CMSG) = 0x10; /* Telephony */
 #endif
-
+#endif
 	buffer[0] = 0x80;
 
 	capi_build_struct(&called, sizeof(called), 
@@ -3780,22 +3801,38 @@ chan_capi_call_sub(struct call_desc *cd, const char *idest, int timeout)
 		CONNECT_REQ_CALLEDPARTYSUBADDRESS(&CMSG) = (_cstruct)calledsubaddress;
 	}
 
+#if (CC_AST_VERSION >= 0x110000)
+	if (1) {
+		struct ast_party_connected_line *pconn =
+		    ast_channel_connected(pbx_chan);
+
+		if (pconn->id.number.str &&
+		    pconn->id.number.valid)
+			strlcpy(callerid, pconn->id.number.str, sizeof(callerid));
+		else
+			callerid[0] = '\0';
+	}
+#else
 #if (CC_AST_VERSION >= 0x10800)
 	if (pbx_chan->connected.id.number.str &&
 	    pbx_chan->connected.id.number.valid)
 		strlcpy(callerid, pbx_chan->connected.id.number.str, sizeof(callerid));
+	else
+		callerid[0] = '\0';
 #else
 #ifdef CC_AST_CHANNEL_HAS_CID
 	if (pbx_chan->cid.cid_num) 
 		strlcpy(callerid, pbx_chan->cid.cid_num, sizeof(callerid));
+	else
+		callerid[0] = '\0';
 #else
 	if (pbx_chan->callerid) 
 		strlcpy(callerid, pbx_chan->callerid, sizeof(callerid));
-#endif
-#endif
 	else
 		callerid[0] = '\0';
-
+#endif
+#endif
+#endif
 	if (use_dst_default && cd->cep) {
 		strlcpy(callerid, cd->cep->dst_default, sizeof(callerid));
 	} else if (ocid) {
@@ -3836,11 +3873,18 @@ chan_capi_call_sub(struct call_desc *cd, const char *idest, int timeout)
 	p = pbx_builtin_getvar_helper(pbx_chan, "DISPLAY");
 
 	if (p == NULL) {
+#if (CC_AST_VERSION >= 0x110000)
+	    struct ast_party_connected_line *pconn =
+	        ast_channel_connected(pbx_chan);
+	    if (pconn->id.name.valid)
+		p = pconn->id.name.str;
+#else
 #if (CC_AST_VERSION >= 0x10800)
 	    if (pbx_chan->connected.id.name.valid)
 		p = pbx_chan->connected.id.name.str;
 #else
 	    p = pbx_chan->cid.cid_name;
+#endif
 #endif
 	}
 
@@ -3893,7 +3937,8 @@ chan_capi_call_sub(struct call_desc *cd, const char *idest, int timeout)
 
 	cd->state = CAPI_STATE_CONNECTPENDING;
 	ast_setstate(pbx_chan, AST_STATE_DIALING);
-	ast_set_flag(pbx_chan, AST_FLAG_END_DTMF_ONLY);
+
+	CC_CHANNEL_SET_FLAG(pbx_chan, AST_FLAG_END_DTMF_ONLY);
 
 	return 0;
 }
@@ -4224,7 +4269,7 @@ chan_capi_read_sub(struct call_desc *cd)
 	    XXX causes locking order reversal.
 	    XXX TODO: Execute this code out of order
 
-	    if (strcmp(pbx_chan->exten, "fax")) {
+	    if (strcmp(CC_CHANNEL_EXTEN(pbx_chan), "fax")) {
 	      if (ast_exists_extension(pbx_chan, ast_strlen_zero(pbx_chan->macrocontext) ? 
 				       CC_CHANNEL_CONTEXT(pbx_chan) : pbx_chan->macrocontext, 
 				       "fax", 1, cd->src_telno)) {
@@ -4232,7 +4277,7 @@ chan_capi_read_sub(struct call_desc *cd)
 		cd_verbose(cd, 2, 0, 3, "Redirecting to fax extension\n");
 
 		/* save the DID/DNIS when we transfer the fax call to a "fax" extension */
-		pbx_builtin_setvar_helper(pbx_chan, "FAXEXTEN", pbx_chan->exten);
+		pbx_builtin_setvar_helper(pbx_chan, "FAXEXTEN", CC_CHANNEL_EXTEN(pbx_chan));
 		if (ast_async_goto(pbx_chan, CC_CHANNEL_CONTEXT(pbx_chan), "fax", 1)) {
 		  cc_log(LOG_WARNING, "Failed to async goto '%s' "
 			 "into fax of '%s'\n", CC_CHANNEL_NAME(pbx_chan), CC_CHANNEL_CONTEXT(pbx_chan));
@@ -4378,7 +4423,11 @@ chan_capi_send_digit_sub(struct call_desc *cd, const char digit)
  * has been called.
  *---------------------------------------------------------------------------*/
 static int
+#if (CC_AST_VERSION >= 0x110000)
+chan_capi_call(struct ast_channel *pbx_chan, const char *idest, int timeout)
+#else
 chan_capi_call(struct ast_channel *pbx_chan, char *idest, int timeout)
+#endif
 {
     struct call_desc *cd = cd_by_pbx_chan(pbx_chan);
     int error = 0;
@@ -4410,7 +4459,7 @@ chan_capi_fixup(struct ast_channel *oldchan, struct ast_channel *newchan)
     }
 
     cd_verbose(cd, 3, 1, 2, "old channel = %s\n",
-	       oldchan->name);
+	       CC_CHANNEL_NAME(oldchan));
 
     cd->pbx_chan = newchan;
 
@@ -4661,7 +4710,11 @@ chan_capi_send_digit_end(struct ast_channel *pbx_chan, const char digit,
  *      chan_capi_devicestate - called from "ast_devicstate()"
  *---------------------------------------------------------------------------*/
 static int
+#if (CC_AST_VERSION >= 0x110000)
+chan_capi_devicestate(const char *data)
+#else
 chan_capi_devicestate(void *data)
+#endif
 {
 	if (data == NULL) {
 	    cc_verbose(3, 1, VERBOSE_PREFIX_2 "No data\n");
@@ -4687,7 +4740,7 @@ capi_handle_dtmf_fax(struct call_desc *cd)
 	
 	cd->flags.fax_handled = 1;
 	
-	if (!strcmp(pbx_chan->exten, "fax")) {
+	if (!strcmp(CC_CHANNEL_EXTEN(pbx_chan), "fax")) {
 		cc_log(LOG_DEBUG, "Already in a FAX "
 		       "extension, not redirecting\n");
 		return;
@@ -4705,7 +4758,7 @@ capi_handle_dtmf_fax(struct call_desc *cd)
 		   "to FAX extension\n");
 			
 	/* Save the DID/DNIS when we transfer the fax call to a "fax" extension */
-	pbx_builtin_setvar_helper(pbx_chan, "FAXEXTEN", pbx_chan->exten);
+	pbx_builtin_setvar_helper(pbx_chan, "FAXEXTEN", CC_CHANNEL_EXTEN(pbx_chan));
 	
 	if (ast_async_goto(pbx_chan, CC_CHANNEL_CONTEXT(pbx_chan), "fax", 1)) {
 	    cc_log(LOG_WARNING, "Failed to async goto '%s' "
@@ -5700,9 +5753,9 @@ cd_copy_telno_ext(struct call_desc *cd, const char *exten)
 
     if (cd->flags.dir_outgoing == 0) {
 
-        pbx_chan->priority = 1;
+        CC_CHANNEL_SET_PRIORITY(pbx_chan, 1);
 
-        strlcpy(pbx_chan->exten, exten, sizeof(pbx_chan->exten));
+        CC_CHANNEL_SET_EXTEN(pbx_chan, exten);
 
 	snprintf(cd->chan_name, sizeof(cd->chan_name), "CAPI/%s/%s-%08x",
 	    cep->name, cd->dst_telno, capi_get_counter());
@@ -5731,6 +5784,24 @@ cd_copy_telno_ext(struct call_desc *cd, const char *exten)
 
 	cc_mutex_unlock(&capi_global_lock);
 
+#if (CC_AST_VERSION >= 0x110000)
+	if (1) {
+		struct ast_party_dialed *pdial = 
+		    ast_channel_dialed(pbx_chan);
+		struct ast_party_caller *pcaller = 
+		    ast_channel_caller(pbx_chan);
+
+		free(pdial->number.str);
+		pdial->number.str = strdup(cd->dst_telno);
+		pdial->number.plan = 0;
+
+		free(pcaller->id.number.str);
+		pcaller->id.number.str = strdup(cd->src_telno);
+		pcaller->id.number.plan = 1;
+		pcaller->id.number.presentation = 1;
+		pcaller->id.number.valid = 1;
+	}
+#else
 #if (CC_AST_VERSION >= 0x10800)
 	free(pbx_chan->dialed.number.str);
 	pbx_chan->dialed.number.str = strdup(cd->dst_telno);
@@ -5755,6 +5826,7 @@ cd_copy_telno_ext(struct call_desc *cd, const char *exten)
 
 	pbx_chan->callerid = strdup(cd->src_telno);
 	pbx_chan->dnid = strdup(cd->dst_telno);
+#endif
 #endif
 #endif
     }
@@ -5801,7 +5873,8 @@ cd_start_pbx(struct call_desc **pp_cd, const char *exten)
 	    cd->state = CAPI_STATE_INCALL;
 
 	cd_verbose(cd, 2, 0, 2, "Started PBX\n");
-	ast_set_flag(pbx_chan, AST_FLAG_END_DTMF_ONLY);
+
+	CC_CHANNEL_SET_FLAG(pbx_chan, AST_FLAG_END_DTMF_ONLY);
 
 	return;
 
@@ -5830,6 +5903,7 @@ capi_handle_connect_indication(_cmsg *CMSG, struct call_desc **pp_cd)
 	uint8_t start_immediate;
 	char buffer[AST_MAX_EXTENSION];
 	uint16_t x;
+	uint16_t cap;
 
 	cd->bchannelinfo[0] = 
 	  capi_get_1(CONNECT_IND_BCHANNELINFORMATION(CMSG),0) + '0';
@@ -5862,10 +5936,15 @@ capi_handle_connect_indication(_cmsg *CMSG, struct call_desc **pp_cd)
 
 	cd->msg_cip = CONNECT_IND_CIPVALUE(CMSG);
 
-#ifdef CC_AST_CHANNEL_HAS_TRANSFERCAP	
-	pbx_chan->transfercapability = cip2tcap(cd->msg_cip);
-#endif
+	cap = cip2tcap(cd->msg_cip);
 
+#if (CC_AST_VERSION >= 0x110000)
+	ast_channel_transfercapability_set(pbx_chan, cap);
+	ast_channel_caller(pbx_chan)->id.number.presentation = cd->src_pres;
+#else
+#ifdef CC_AST_CHANNEL_HAS_TRANSFERCAP	
+	pbx_chan->transfercapability = cap;
+#endif
 #if (CC_AST_VERSION >= 0x10800)
 	pbx_chan->caller.id.number.presentation = cd->src_pres;
 #else
@@ -5875,12 +5954,12 @@ capi_handle_connect_indication(_cmsg *CMSG, struct call_desc **pp_cd)
 	pbx_chan->callingpres = cd->src_pres;
 #endif
 #endif
-#ifdef CC_AST_CHANNEL_HAS_TRANSFERCAP	
-	pbx_builtin_setvar_helper(pbx_chan, "TRANSFERCAPABILITY", 
-             transfercapability2str(pbx_chan->transfercapability));
 #endif
+	pbx_builtin_setvar_helper(pbx_chan, "TRANSFERCAPABILITY",
+             transfercapability2str(cap));
+
 	pbx_builtin_setvar_helper(pbx_chan, "BCHANNELINFO", 
-				  (void *)(cd->bchannelinfo));
+	     (void *)(cd->bchannelinfo));
 
 	snprintf(buffer, sizeof(buffer), "%d", cd->dst_ton);
 	pbx_builtin_setvar_helper(pbx_chan, "CALLEDTON", &buffer[0]);
@@ -6828,11 +6907,16 @@ chan_capi_command_exec(struct ast_channel *chan, void *data)
 	}
 
 	if (capicmd->capi_only) {
-#if (CC_AST_VERSION >= 0x10400)
-	    if (chan->tech != &chan_capi_tech) {
+#if (CC_AST_VERSION >= 0x110000)
+	    if (ast_channel_tech(chan) != &chan_capi_tech)
 #else
-	    if (strcmp(chan->type, "CAPI")) {
+#if (CC_AST_VERSION >= 0x10400)
+	    if (chan->tech != &chan_capi_tech)
+#else
+	    if (strcmp(chan->type, "CAPI"))
 #endif
+#endif
+	    {
 	        cc_log(LOG_WARNING, "capiCommand works on CAPI "
 		       "channels only. Check your "
 		       "'extensions.conf'!\n");
