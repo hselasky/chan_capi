@@ -5851,17 +5851,7 @@ cd_start_pbx(struct call_desc **pp_cd, const char *exten)
 
 	cd_copy_telno_ext(cd, exten);
 
-#if (CC_AST_VERSION >= 0x10400)
-	if (cd->chan_name[0] != 0)
-		ast_change_name(pbx_chan, cd->chan_name);
-#endif
 	ast_setstate(pbx_chan, AST_STATE_RING);
-
-	if (ast_pbx_start(cd->pbx_chan)) {
-	    goto error;
-	}
-
-	cd->flags.pbx_started = 1;
 
 	if (cd->flags.sending_complete_received ||
 	    (!cd->options.late_callproc)) {
@@ -5869,8 +5859,61 @@ cd_start_pbx(struct call_desc **pp_cd, const char *exten)
 	    * which will also set new state
 	    */
 	    capi_send_alert_req(cd, 1);
-	} else
+	} else {
 	    cd->state = CAPI_STATE_INCALL;
+	}
+
+#if (CC_AST_VERSION >= 0x10400)
+	if (cd->chan_name[0] != 0) {
+		/*
+		 * The "ast_change_name()" function locks the global
+		 * channel list mutex when updating the channel name
+		 * due to the need to recompute some hash values. The
+		 * channel list mutex is sometimes locked when
+		 * receiving callbacks from Asterisk. This eventually
+		 * leads to a deadlock which is solved by unlocking
+		 * the "cd->p_app->lock" during calls to
+		 * "ast_change_name()":
+		 *
+		 * Reasoning behind safety around unlocking
+		 * "cd->p_app->lock" inside this function follows:
+		 *
+		 * Case 1 - "cd_start_pbx()" is called from "capi_do_monitor()" thread:
+		 *
+		 * a) No disconnect event can be received from CAPI,
+		 *    because thread is blocked.
+		 * b) No hangup event can be received from Asterisk,
+		 *    because channel is not started yet.
+		 * c) The "do_periodic()" thread will not try to call
+		 *    this function because the "cd->state" is not equal
+		 *    to "CAPI_STATE_DID".
+		 * d) We can lock and unlock "cd->p_app->lock" without
+		 *    fear of loosing the object pointed to by "pbx_chan".
+		 *
+		 * Case 2 - "cd_start_pbx()" is called from "do_periodic()" thread:
+		 *
+		 * a) A disconnect event can be received and processed
+		 *    from CAPI, but because channel is not started, has
+		 *    to be hard hungup by "do_periodic()" thread which
+		 *    is blocked because of calling this function.
+		 * b) We can lock and unlock "cd->p_app->lock" without
+		 *    fear of loosing the object pointed to by "pbx_chan".
+		 */
+		cc_mutex_unlock(&cd->p_app->lock);
+		ast_change_name(pbx_chan, cd->chan_name);
+		cc_mutex_lock(&cd->p_app->lock);
+
+		if (cd->hangup_chan != 0 || cd->free_chan != 0) {
+			cd_verbose(cd, 3, 0, 2,  "Hangup while changing name\n");
+			/* let period thread cleanup */
+			return;
+		}
+	}
+#endif
+	if (ast_pbx_start(cd->pbx_chan))
+		goto error;
+
+	cd->flags.pbx_started = 1;
 
 	cd_verbose(cd, 2, 0, 2, "Started PBX\n");
 
