@@ -1093,7 +1093,15 @@ capi_application_alloc(void)
     uint32_t error;
     uint32_t app_id;
 
-    error = capi20_be_alloc_i4b(&cbe_p);
+    error = capi20_be_alloc_bintec(getenv("BINTEC_HOST"), getenv("BINTEC_PORT"),
+	getenv("BINTEC_USER"), getenv("BINTEC_PASS"), &cbe_p);
+    if (error) {
+	error = capi20_be_alloc_client(getenv("CAPI_CLIENT_HOST"),
+	    getenv("CAPI_CLIENT_PORT"), &cbe_p);
+    }
+    if (error) {
+	error = capi20_be_alloc_i4b(&cbe_p);
+    }
     if (error) {
         cc_log(LOG_WARNING, "Cannot allocate I4B CAPI "
 	       "backend!\n");
