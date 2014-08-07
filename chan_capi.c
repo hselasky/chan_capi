@@ -1064,13 +1064,16 @@ capi_application_restart(struct cc_capi_application *p_app)
 			cc_log(LOG_WARNING, "The CAPI cannot register application\n");
 			continue;
 		}
-		error = chan_capi_post_init(p_app);
-
     } while (error != 0);
 
     cc_mutex_lock(&p_app->lock);
     p_app->application_id = app_id;
+    error = chan_capi_post_init(p_app);
     cc_mutex_unlock(&p_app->lock);
+
+    if (error) {
+        cc_log(LOG_WARNING, "CAPI post init failed\n");
+    }
 
     cc_log(LOG_WARNING, "CAPI application was restarted\n");
 }
