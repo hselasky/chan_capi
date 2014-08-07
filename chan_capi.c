@@ -1060,6 +1060,12 @@ capi_application_restart(struct cc_capi_application *p_app)
 		error = capi20_register(CAPI_BCHANS, (CAPI_MAX_B3_BLOCKS+1)/2,
 		    CAPI_MAX_B3_BLOCK_SIZE, &app_id);
 #endif
+		if (error) {
+			cc_log(LOG_WARNING, "The CAPI cannot register application\n");
+			continue;
+		}
+		error = chan_capi_post_init(p_app);
+
     } while (error != 0);
 
     cc_mutex_lock(&p_app->lock);
