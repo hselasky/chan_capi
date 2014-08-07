@@ -1020,6 +1020,50 @@ cep_queue_last(struct config_entry_iface *cep_last)
     return;
 }
 
+static void
+capi_application_restart(struct cc_capi_application *p_app)
+{
+    struct call_desc *cd;
+    uint32_t error;
+    uint32_t app_id;
+
+    cc_mutex_lock(&p_app->lock);
+
+    cd = p_app->cd_root_ptr;
+
+    while (cd != NULL) {
+        if(!CD_IS_UNUSED(cd)) {
+	    cc_log(LOG_WARNING, "CAPI call descriptor is still active!\n");
+	    cd_free(cd, 1);
+	}
+        cd = cd->next;
+    }
+
+    p_app->application_id = -1U;
+    cc_mutex_unlock(&p_app->lock);
+
+    do {
+	/* wait for calls to hang up */
+
+	capi_application_usleep(p_app, 1000000);
+
+#if (CAPI_OS_HINT == 2)
+		error = capi20_register(p_app->cbe_p, CAPI_BCHANS,
+		    (CAPI_MAX_B3_BLOCKS+1)/2, CAPI_MAX_B3_BLOCK_SIZE,
+		    CAPI_STACK_VERSION, &app_id);
+#else
+		error = capi20_register(CAPI_BCHANS, (CAPI_MAX_B3_BLOCKS+1)/2,
+		    CAPI_MAX_B3_BLOCK_SIZE, &app_id);
+#endif
+    } while (error != 0);
+
+    cc_mutex_lock(&p_app->lock);
+    p_app->application_id = app_id;
+    cc_mutex_unlock(&p_app->lock);
+
+    cc_log(LOG_WARNING, "CAPI application was restarted\n");
+}
+
 /*---------------------------------------------------------------------------*
  *      capi_application_free - free a CAPI application
  *---------------------------------------------------------------------------*/
@@ -2664,6 +2708,10 @@ capi_check_wait_get_cmsg(struct cc_capi_application *p_app, _cmsg *CMSG)
 	cc_mutex_unlock(&p_app->lock);
 
 	error = capi20_waitformessage(p_app->application_id, &tv);
+	if (error == CAPI_ERROR_INVALID_APPLICATION_ID) {
+		capi_application_restart(p_app);
+		goto repeat;
+	}
 
 	cc_mutex_lock(&p_app->lock);
 
