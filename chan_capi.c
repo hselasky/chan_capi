@@ -1043,10 +1043,15 @@ capi_application_restart(struct cc_capi_application *p_app)
     cc_mutex_unlock(&p_app->lock);
 
     do {
-	/* wait for calls to hang up */
+		/* wait for calls to hang up */
+		capi_application_usleep(p_app, 1000000);
 
-	capi_application_usleep(p_app, 1000000);
-
+		error = capi20_isinstalled(p_app->cbe_p);
+		if (error) {
+			cc_log(LOG_WARNING, "The CAPI device is "
+			    "not present or accessible!\n");
+			continue;
+		}
 #if (CAPI_OS_HINT == 2)
 		error = capi20_register(p_app->cbe_p, CAPI_BCHANS,
 		    (CAPI_MAX_B3_BLOCKS+1)/2, CAPI_MAX_B3_BLOCK_SIZE,
@@ -1135,7 +1140,6 @@ capi_application_alloc(void)
     struct cc_capi_application *p_app;
     struct capi20_backend *cbe_p;
     uint32_t error;
-    uint32_t app_id;
 
     error = capi20_be_alloc_bintec(getenv("BINTEC_HOST"), getenv("BINTEC_PORT"),
 	getenv("BINTEC_USER"), getenv("BINTEC_PASS"), &cbe_p);
@@ -1152,28 +1156,6 @@ capi_application_alloc(void)
 	return NULL;
     }
 
-    error = capi20_isinstalled(cbe_p);
-    if (error) {
-        cc_log(LOG_WARNING, "The CAPI device is "
-	       "not present or accessible!\n");
-        capi20_be_free(cbe_p);
-	return NULL;
-    }
-#if (CAPI_OS_HINT == 2)
-    error = capi20_register(cbe_p, CAPI_BCHANS, (CAPI_MAX_B3_BLOCKS+1)/2,
-			    CAPI_MAX_B3_BLOCK_SIZE,
-			    CAPI_STACK_VERSION, &app_id);
-#else
-    error = capi20_register(CAPI_BCHANS, (CAPI_MAX_B3_BLOCKS+1)/2,
-			    CAPI_MAX_B3_BLOCK_SIZE, &app_id);
-#endif
-    if (error) {
-        cc_log(LOG_NOTICE, "unable to register a CAPI application, "
-	       "error=0x%04x!\n", error);
-        capi20_be_free(cbe_p);
-	return NULL;
-    }
-
     p_app = malloc(sizeof(*p_app));
 
     if (p_app == NULL) {
@@ -1187,7 +1169,7 @@ capi_application_alloc(void)
     cc_mutex_lock(&p_app->lock);
 
     p_app->cd_alloc_rate_max = 16; /* max 16 calls per second */
-    p_app->application_id = app_id;
+    p_app->application_id = -1U;
     p_app->cbe_p = cbe_p;
 
     error = ast_pthread_create(&p_app->monitor_thread, NULL, &capi_do_monitor, p_app);
@@ -1204,13 +1186,12 @@ capi_application_alloc(void)
     return p_app;
 
  error:
-    if (p_app) {
+    if (p_app != NULL) {
       cc_mutex_unlock(&p_app->lock);
       cc_mutex_lock(&do_periodic_lock);
       capi_application_free(p_app);
       cc_mutex_unlock(&do_periodic_lock);
     } else {
-      capi20_release(app_id);
       capi20_be_free(cbe_p);
     }
     return NULL;
