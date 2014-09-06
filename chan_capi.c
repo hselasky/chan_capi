@@ -778,7 +778,7 @@ static uint8_t
 capi_application_usleep(struct cc_capi_application *p_app, uint32_t us);
 
 static int
-chan_capi_scan_config(struct ast_config *cfg);
+chan_capi_scan_config(struct ast_config *cfg, int do_global);
 
 static uint16_t
 chan_capi_post_init(struct cc_capi_application *p_app);
@@ -968,7 +968,6 @@ cep_unload(void)
     cep_root_ptr = NULL;
 
     cc_mutex_unlock(&capi_global_lock);
-    return;
 }
 
 static struct config_entry_iface *
@@ -1052,6 +1051,20 @@ capi_application_restart(struct cc_capi_application *p_app)
 			    "not present or accessible!\n");
 			continue;
 		}
+		cc_mutex_lock(&capi_global_lock);
+		error = capi20_be_socket_configure(p_app->cbe_p,
+		    capi_global.host[0] ? capi_global.host : NULL,
+		    capi_global.port[0] ? capi_global.port : NULL,
+		    capi_global.user[0] ? capi_global.user : NULL,
+		    capi_global.pass[0] ? capi_global.pass : NULL);
+		cc_mutex_unlock(&capi_global_lock);
+
+		if (error) {
+			cc_log(LOG_WARNING, "The CAPI backend "
+			    "cannot be configured!\n");
+			continue;
+		}
+
 #if (CAPI_OS_HINT == 2)
 		error = capi20_register(p_app->cbe_p, CAPI_BCHANS,
 		    (CAPI_MAX_B3_BLOCKS+1)/2, CAPI_MAX_B3_BLOCK_SIZE,
@@ -1148,21 +1161,26 @@ capi_application_alloc(void)
 {
     struct cc_capi_application *p_app;
     struct capi20_backend *cbe_p;
+    char backend[CAPI_MAX_BACKENDNAME];
     uint32_t error;
 
-    error = capi20_be_alloc_bintec(getenv("BINTEC_HOST"), getenv("BINTEC_PORT"),
-	getenv("BINTEC_USER"), getenv("BINTEC_PASS"), &cbe_p);
-    if (error) {
-	error = capi20_be_alloc_client(getenv("CAPI_CLIENT_HOST"),
-	    getenv("CAPI_CLIENT_PORT"), &cbe_p);
-    }
-    if (error) {
+    cc_mutex_lock(&capi_global_lock);
+    strlcpy(backend, capi_global.backend, sizeof(backend));
+    cc_mutex_unlock(&capi_global_lock);
+
+    if (strcmp(backend, "bintec") == 0) {
+	error = capi20_be_alloc_bintec(&cbe_p);
+    } else if (strcmp(backend, "capiclient") == 0) {
+	error = capi20_be_alloc_client(&cbe_p);
+    } else if (strcmp(backend, "capi20") == 0) {
 	error = capi20_be_alloc_i4b(&cbe_p);
+    } else {
+	error = CAPI_ERROR_INVALID_APPLICATION_ID;
     }
     if (error) {
-        cc_log(LOG_WARNING, "Cannot allocate I4B CAPI "
-	       "backend!\n");
-	return NULL;
+	cc_log(LOG_WARNING, "Cannot allocate "
+	    "backend for '%s'\n", backend);
+	return (NULL);
     }
 
     p_app = malloc(sizeof(*p_app));
@@ -7330,7 +7348,7 @@ chan_capi_reload(int fd, int argc, char *argv[])
 
 	cc_mutex_lock(&p_app->lock);
 
-	error = chan_capi_scan_config(cfg);
+	error = chan_capi_scan_config(cfg, 1);
 
 	if (error) {
 	    goto done;
@@ -7479,10 +7497,12 @@ chan_capi_get_info(int fd, int argc, char *argv[])
 
 	if (p_app) {
 	    cc_mutex_lock(&p_app->lock);
+	    cc_mutex_lock(&capi_global_lock);
 	    ast_cli(fd, 
 		    "CAPI thread [0x%x] {\n"
 		    " Application ID     : 0x%08x\n"
 		    " Application uptime : 0x%08x seconds\n"
+		    " Backend            : %s @ %s%s%s%s%s\n"
 		    "\n"
 		    " Call descriptor statistics:\n"
 		    "    allocation count        : 0x%08x call descriptors\n"
@@ -7496,12 +7516,16 @@ chan_capi_get_info(int fd, int argc, char *argv[])
 		    n,
 		    p_app->application_id,
 		    p_app->application_uptime,
+		    capi_global.backend, capi_global.host,
+		    capi_global.port[0] ? ":" : "", capi_global.port,
+		    capi_global.user[0] ? "/" : "", capi_global.user,
 		    p_app->cd_alloc_stats,
 		    p_app->cd_free_stats,
 		    p_app->cd_root_allocated,
 		    p_app->cd_root_used,
 		    p_app->cd_alloc_rate_record,
 		    p_app->cd_alloc_rate_max);
+	    cc_mutex_unlock(&capi_global_lock);
 
 	    /* collect per-controller statistics */
 
@@ -8151,6 +8175,9 @@ chan_capi_parse_global_config(struct ast_variable *v,
 
 	memset(cep, 0, sizeof(*cep));
 
+	strlcpy(cep->backend, "capi20", sizeof(cep->backend));
+	strlcpy(cep->host, "localhost", sizeof(cep->host));
+
 	strlcpy(cep->national_prefix, CAPI_NATIONAL_PREF, 
 		sizeof(cep->national_prefix));
 
@@ -8220,23 +8247,26 @@ chan_capi_parse_global_config(struct ast_variable *v,
 		}
 	    } else if (!strcasecmp(v->name, "ton2digit")) {
 		cep->ton2digit = atoi(v->value) ? 1 : 0;
+	    } else if (!strcasecmp(v->name, "backend")) {
+	        strlcpy(cep->backend, v->value, sizeof(cep->backend));
+	    } else if (!strcasecmp(v->name, "host")) {
+	        strlcpy(cep->host, v->value, sizeof(cep->host));
+	    } else if (!strcasecmp(v->name, "port")) {
+	        strlcpy(cep->port, v->value, sizeof(cep->port));
+	    } else if (!strcasecmp(v->name, "username")) {
+	        strlcpy(cep->user, v->value, sizeof(cep->user));
+	    } else if (!strcasecmp(v->name, "password")) {
+	        strlcpy(cep->pass, v->value, sizeof(cep->pass));
 	    }
 	}
-	return;
 }
 
 /* scan "capi.conf" */
 
-static int
-chan_capi_scan_config(struct ast_config *cfg)
+static void
+chan_capi_scan_global_config(struct ast_config *cfg)
 {
-	struct config_entry_iface *cep = NULL;
 	struct config_entry_global capi_global_shadow;
-	char *cat = NULL;
-
-	/* unload existing configuration */
-
-	cep_unload();
 
 	chan_capi_parse_global_config
 	  (ast_variable_browse(cfg, "general"), &capi_global_shadow);
@@ -8244,6 +8274,20 @@ chan_capi_scan_config(struct ast_config *cfg)
 	cc_mutex_lock(&capi_global_lock);
 	capi_global = capi_global_shadow;
 	cc_mutex_unlock(&capi_global_lock);
+}
+
+static int
+chan_capi_scan_config(struct ast_config *cfg, int do_global)
+{
+	struct config_entry_iface *cep = NULL;
+	char *cat = NULL;
+
+	/* unload existing configuration */
+
+	cep_unload();
+
+	if (do_global != 0)
+		chan_capi_scan_global_config(cfg);
 
 	/* go through the other sections, which are the interfaces */
 
@@ -8388,6 +8432,12 @@ int load_module(void)
 	}
 	chan_capi_load_level = 1;
 
+	/*
+	 * Need to load the global configuration before doing the CAPI
+	 * application allocation:
+	 */
+	chan_capi_scan_global_config(cfg);
+
 	p_app = capi_application_alloc();
 
 	if (p_app == NULL) {
@@ -8405,7 +8455,7 @@ int load_module(void)
 
 	app_locked = 1;
 
-	error = chan_capi_scan_config(cfg);
+	error = chan_capi_scan_config(cfg, 0);
 
 	if (error) {
 	    goto done;

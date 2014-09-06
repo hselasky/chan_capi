@@ -32,6 +32,11 @@
 #define CAPI_MAX_CONTROLLERS             64
 #define CAPI_MAX_APPLICATIONS             8
 #define CAPI_MAX_B3_BLOCKS                7
+#define	CAPI_MAX_HOSTNAME		256
+#define	CAPI_MAX_PORTNAME		 32
+#define	CAPI_MAX_BACKENDNAME		 32
+#define	CAPI_MAX_USERNAME		128
+#define	CAPI_MAX_PASSWORD		256
 
 /* was : 130 bytes Alaw = 16.25 ms audio not suitable for VoIP */
 /* now : 160 bytes Alaw = 20 ms audio */
@@ -422,6 +427,11 @@ struct cc_capi_options {
 /* global config entry structure */
 
 struct config_entry_global {
+	char host[CAPI_MAX_HOSTNAME];
+	char port[CAPI_MAX_PORTNAME];
+	char backend[CAPI_MAX_BACKENDNAME];
+	char user[CAPI_MAX_USERNAME];
+	char pass[CAPI_MAX_PASSWORD];
 	char national_prefix[AST_MAX_EXTENSION];
 	char international_prefix[AST_MAX_EXTENSION];
 	char default_language[MAX_LANGUAGE];

@@ -13,13 +13,19 @@
 ;
 nationalprefix=0
 internationalprefix=00
-rxgain=1.0
-txgain=1.0
-;ulaw=yes         ;set this, if you live in u-law world instead of a-law
-;debug=yes        ;set this, if capi debugging should be enabled by default
-;alert_timeout=30 ;Alert timeout in seconds. Zero means use defaults.
-; interface sections ...
-;ton2digit=1	  ;Prefix destination phone number with international and
+rxgain=1.0            ;receive gain
+txgain=1.0            ;transmit gain
+;backend=capi20       ;set this, if you want to use /dev/capi20 (default)
+;backend=capiclient   ;set this, if you want to use the capiclient socket backend
+;backend=bintec       ;set this, if you want to use the bintec socket backend
+;host=capi.myhost.com ;used with capiclient and bintec backends
+;port=1234            ;used with capiclient and bintec backends
+;username=user        ;used with bintec
+;password=pass        ;used with bintec
+;ulaw=yes             ;set this, if you live in u-law world instead of a-law
+;debug=yes            ;set this, if capi debugging should be enabled by default
+;alert_timeout=30     ;Alert timeout in seconds. Zero means use defaults.
+;ton2digit=1	      ;Prefix destination phone number with international and
 
 ;
 ; This is an example for an ISDN adapter
