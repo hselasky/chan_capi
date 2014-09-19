@@ -1045,12 +1045,6 @@ capi_application_restart(struct cc_capi_application *p_app)
 		/* wait for calls to hang up */
 		capi_application_usleep(p_app, 1000000);
 
-		error = capi20_isinstalled(p_app->cbe_p);
-		if (error) {
-			cc_log(LOG_WARNING, "The CAPI device is "
-			    "not present or accessible!\n");
-			continue;
-		}
 		cc_mutex_lock(&capi_global_lock);
 		error = capi20_be_socket_configure(p_app->cbe_p,
 		    capi_global.host[0] ? capi_global.host : NULL,
@@ -1058,10 +1052,16 @@ capi_application_restart(struct cc_capi_application *p_app)
 		    capi_global.user[0] ? capi_global.user : NULL,
 		    capi_global.pass[0] ? capi_global.pass : NULL);
 		cc_mutex_unlock(&capi_global_lock);
-
 		if (error) {
 			cc_log(LOG_WARNING, "The CAPI backend "
 			    "cannot be configured!\n");
+			continue;
+		}
+
+		error = capi20_isinstalled(p_app->cbe_p);
+		if (error) {
+			cc_log(LOG_WARNING, "The CAPI device is "
+			    "not present or accessible!\n");
 			continue;
 		}
 
