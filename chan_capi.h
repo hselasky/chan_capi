@@ -536,8 +536,6 @@ struct call_desc {
 	/*! CAPI echo canceller ring buffer */
 	struct ring_buffer ring_buf;
 
-	struct timeval rx_time;
-
 	struct ast_channel *hangup_chan;
 	struct ast_channel *free_chan;
 
