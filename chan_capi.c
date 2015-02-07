@@ -2427,7 +2427,6 @@ cd_send_pbx_voice(struct call_desc *cd, const void *data_ptr, uint32_t data_len)
 {
     struct ast_channel *pbx_chan = cd->pbx_chan;
     struct ast_frame temp_fr;
-    struct ast_frame copy_fr;
     int len = 0;
 
     memset(&temp_fr, 0, sizeof(temp_fr));
@@ -2438,8 +2437,6 @@ cd_send_pbx_voice(struct call_desc *cd, const void *data_ptr, uint32_t data_len)
     temp_fr.datalen = data_len;
     temp_fr.samples = data_len;
     temp_fr.offset = AST_FRIENDLY_OFFSET;
-
-    memcpy(&copy_fr, &temp_fr, sizeof(copy_fr));
 
     cd_verbose(cd, 8, 1, 3, "temp_fr.datalen=%d, "
 	       "temp_fr.subclass=%d\n", temp_fr.datalen, 

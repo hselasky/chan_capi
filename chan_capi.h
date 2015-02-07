@@ -31,7 +31,7 @@
 
 #define CAPI_MAX_CONTROLLERS             64
 #define CAPI_MAX_APPLICATIONS             8
-#define CAPI_MAX_B3_BLOCKS                7
+#define CAPI_MAX_B3_BLOCKS               25
 #define	CAPI_MAX_HOSTNAME		256
 #define	CAPI_MAX_PORTNAME		 32
 #define	CAPI_MAX_BACKENDNAME		 32
@@ -42,7 +42,7 @@
 /* now : 160 bytes Alaw = 20 ms audio */
 /* you can tune this to your need. higher value == more latency */
 #define CAPI_MAX_B3_BLOCK_SIZE          160
-#define CAPI_MAX_QLEN                    50 /* frames */
+#define CAPI_MAX_QLEN                    25 /* frames */
 
 #define CAPI_BCHANS                     120
 #define ALL_SERVICES             0x1FFF03FF
