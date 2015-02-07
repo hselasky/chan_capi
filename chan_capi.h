@@ -31,7 +31,7 @@
 
 #define CAPI_MAX_CONTROLLERS             64
 #define CAPI_MAX_APPLICATIONS             8
-#define CAPI_MAX_B3_BLOCKS               25
+#define CAPI_MAX_B3_BLOCKS		  8
 #define	CAPI_MAX_HOSTNAME		256
 #define	CAPI_MAX_PORTNAME		 32
 #define	CAPI_MAX_BACKENDNAME		 32
