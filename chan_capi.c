@@ -2464,7 +2464,12 @@ cd_send_pbx_voice(struct call_desc *cd, const void *data_ptr, uint32_t data_len)
 
     if (cd->tx_queue_len < CAPI_MAX_QLEN) {
 
-        cd->tx_queue_len++;
+	cd->tx_queue_len++;
+	cd->rx_time_us += temp_fr.samples * 125;
+
+	/* properly timestamp incoming frames */
+	ast_set_flag(&temp_fr, AST_FRFLAG_HAS_TIMING_INFO);
+	temp_fr.ts = cd->rx_time_us / 1000;	/* ms */
 
 	len = write(cd->fd[1], &temp_fr, sizeof(temp_fr));
 
