@@ -2433,9 +2433,6 @@ cd_send_pbx_voice(struct call_desc *cd, const void *data_ptr, int data_len)
     struct ast_frame temp_fr;
     int len = 0;
 
-    if (data_len <= 0)
-	return (0);
-
     memset(&temp_fr, 0, sizeof(temp_fr));
 
     temp_fr.frametype = AST_FRAME_VOICE;
@@ -5402,6 +5399,9 @@ capi_handle_data_b3_indication(_cmsg *CMSG, struct call_desc **pp_cd)
 
 	len_curr = DATA_B3_IND_DATALENGTH(CMSG);
 	ptr_curr = RX_BUFFER_BY_HANDLE(cd, cd->rx_buffer_handle);
+
+	/* add asterisk offset */
+	ptr_curr += AST_FRIENDLY_OFFSET;
 
 	/* extra length checks, should not trigger */
 
