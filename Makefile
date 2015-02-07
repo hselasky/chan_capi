@@ -26,7 +26,7 @@
 # Makefile for Asterisk PBX CAPI channel driver
 #
 
-VERSION=2.0.9
+VERSION=2.0.10
 CONFIGFILE=${.CURDIR}/config.h
 GREP?=grep
 
