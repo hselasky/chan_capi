@@ -5409,8 +5409,6 @@ capi_handle_data_b3_indication(_cmsg *CMSG, struct call_desc **pp_cd)
 	    len_curr = CAPI_MAX_B3_BLOCK_SIZE;
 	}
 
-	cd->rx_buffer_len[cd->rx_buffer_handle] =  len_curr;
-
 	memcpy(ptr_curr, DATA_B3_IND_DATA(CMSG), len_curr);
 
 	/* send a DATA_B3_RESP very quickly to free the buffer in capi */

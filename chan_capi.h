@@ -624,13 +624,10 @@ struct call_desc {
 				  AST_FRIENDLY_OFFSET) * CAPI_MAX_B3_BLOCKS];
 
 #define RX_BUFFER_BY_HANDLE(cd, handle) \
-  ((cd)->rx_buffer_data + AST_FRIENDLY_OFFSET + \
+  ((cd)->rx_buffer_data + \
    ((CAPI_MAX_B3_BLOCK_SIZE + AST_FRIENDLY_OFFSET) * (handle)))
 
-	uint16_t rx_buffer_len[CAPI_MAX_B3_BLOCKS];
-
 	uint16_t rx_buffer_handle;
-	uint16_t rx_noise_count;
 
 	/*! CAPI hangup cause received */
 	uint16_t wCause_in;
