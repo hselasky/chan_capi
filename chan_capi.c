@@ -773,7 +773,7 @@ cd_by_pbx_chan(struct ast_channel *pbx_chan);
 
 static int 
 cd_send_pbx_frame(struct call_desc *cd, int frametype, int subclass, 
-		  const void *data, uint16_t len);
+		  const void *data, int len);
 static uint8_t
 capi_application_usleep(struct cc_capi_application *p_app, uint32_t us);
 
@@ -2037,6 +2037,8 @@ cd_alloc_pbx_channel(const char *name, const char *dest)
     return (pbx_chan);
 }
 
+extern char chan_capi_assert[PIPE_BUF - sizeof(struct ast_frame)];
+
 /*---------------------------------------------------------------------------*
  *      cd_alloc - allocate a new call descriptor
  *
@@ -2128,6 +2130,10 @@ cd_alloc(struct cc_capi_application *p_app,
 
     cd->fd[0] = fds[0];
     cd->fd[1] = fds[1];
+
+    /* set NONBLOCK I/O for write side */
+    fmt = 1;
+    ioctl(fds[1], FIONBIO, &fmt);
 
     if (pbx_chan == NULL) {
         cc_log(LOG_ERROR, "Unable to allocate a PBX channel!\n");
@@ -2402,15 +2408,13 @@ cd_detect_dtmf(struct call_desc *cd, int subclass, const void *__data, int len)
         cd_verbose(cd, 1, 1, 3, "Detected DTMF "
 		   "digit: '%c'\n", digit);
 
-	cd->tx_queue_len++;
-
 	len = write(cd->fd[1], &temp_fr, sizeof(temp_fr));
 
-	if (len < sizeof(temp_fr)) {
-
+	if (len < (int)sizeof(temp_fr)) {
 	    cd_log(cd, LOG_ERROR, "wrote %d bytes instead "
 		   "of %d bytes!\n", len, (uint32_t)sizeof(temp_fr));
-
+	} else {
+	    cd->tx_queue_len++;
 	}
     }
     cd->last_dtmf_digit = digit;
@@ -2423,11 +2427,14 @@ cd_detect_dtmf(struct call_desc *cd, int subclass, const void *__data, int len)
  * returns 0 on success
  *---------------------------------------------------------------------------*/
 static int
-cd_send_pbx_voice(struct call_desc *cd, const void *data_ptr, uint32_t data_len)
+cd_send_pbx_voice(struct call_desc *cd, const void *data_ptr, int data_len)
 {
     struct ast_channel *pbx_chan = cd->pbx_chan;
     struct ast_frame temp_fr;
     int len = 0;
+
+    if (data_len <= 0)
+	return (0);
 
     memset(&temp_fr, 0, sizeof(temp_fr));
 
@@ -2460,8 +2467,6 @@ cd_send_pbx_voice(struct call_desc *cd, const void *data_ptr, uint32_t data_len)
 #endif
 
     if (cd->tx_queue_len < CAPI_MAX_QLEN) {
-
-	cd->tx_queue_len++;
 	cd->rx_time_us += temp_fr.samples * 125;
 
 	/* properly timestamp incoming frames */
@@ -2471,10 +2476,10 @@ cd_send_pbx_voice(struct call_desc *cd, const void *data_ptr, uint32_t data_len)
 	len = write(cd->fd[1], &temp_fr, sizeof(temp_fr));
 
 	if (len < (int)sizeof(temp_fr)) {
-
 	    cd_log(cd, LOG_ERROR, "wrote %d bytes instead "
 		   "of %d bytes!\n", len, (uint32_t)sizeof(temp_fr));
-	    return -1;
+	} else {
+	   cd->tx_queue_len++;
 	}
     }
     return 0;
@@ -2487,7 +2492,7 @@ cd_send_pbx_voice(struct call_desc *cd, const void *data_ptr, uint32_t data_len)
  *---------------------------------------------------------------------------*/
 static int 
 cd_send_pbx_frame(struct call_desc *cd, int frametype, int subclass, 
-		  const void *data, uint16_t len)
+		  const void *data, int len)
 {
     struct ast_channel *pbx_chan = cd->pbx_chan;
     struct ast_frame temp_fr;
@@ -2521,15 +2526,13 @@ cd_send_pbx_frame(struct call_desc *cd, int frametype, int subclass,
 	}
     }
 
-    cd->tx_queue_len++;
-
     len = write(cd->fd[1], &temp_fr, sizeof(temp_fr));
 
-    if (len != sizeof(temp_fr)) {
-
+    if (len < (int)sizeof(temp_fr)) {
         cd_log(cd, LOG_ERROR, "wrote %d bytes instead "
 	       "of %d bytes!\n", len, (uint32_t)sizeof(temp_fr));
-	return -1;
+    } else {
+	cd->tx_queue_len++;
     }
     return 0;
 }
@@ -5414,6 +5417,9 @@ capi_handle_data_b3_indication(_cmsg *CMSG, struct call_desc **pp_cd)
 	DATA_B3_RESP_DATAHANDLE(&CMSG2) = DATA_B3_IND_DATAHANDLE(CMSG);
 	__capi_put_cmsg(cd->p_app, &CMSG2);
 
+	if (len_curr == 0)
+		return;
+
 	if (cd->fax_file && cd->flags.fax_receiving) {
 
 		/* write data to FAX file */
@@ -5440,7 +5446,6 @@ capi_handle_data_b3_indication(_cmsg *CMSG, struct call_desc **pp_cd)
 			cd->cep ? cd->cep->rx_convert : NULL);
 
 	cd_send_pbx_voice(cd, ptr_curr, len_curr);
-	return;
 }
 
 /*
