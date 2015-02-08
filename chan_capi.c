@@ -2131,8 +2131,9 @@ cd_alloc(struct cc_capi_application *p_app,
     cd->fd[0] = fds[0];
     cd->fd[1] = fds[1];
 
-    /* set NONBLOCK I/O for write side */
+    /* set nonblocking I/O */
     fmt = 1;
+    ioctl(fds[0], FIONBIO, &fmt);
     ioctl(fds[1], FIONBIO, &fmt);
 
     if (pbx_chan == NULL) {
@@ -4296,15 +4297,12 @@ chan_capi_read_sub(struct call_desc *cd)
 	len = read(cd->fd[0], &cd->pbx_rd, sizeof(cd->pbx_rd));
 
 	if (len < 0) {
+	    if (errno == EWOULDBLOCK || errno == EAGAIN || errno == EINTR)
+		p_frame = &ast_null_frame;
 
 	    goto done;
 
 	} else if (len < (int)sizeof(cd->pbx_rd)) {
-
-	    goto repeat;
-	}
-
-	if (cd->pbx_rd.frametype == AST_FRAME_NULL) {
 
 	    goto done;
 	}
