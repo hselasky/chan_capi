@@ -4180,12 +4180,8 @@ chan_capi_read_sub(struct call_desc *cd)
 	    goto done;
 	}
 
-	if (cd->pbx_rd.frametype == AST_FRAME_VOICE) {
-
-	    if(cd->tx_queue_len) {
-	       cd->tx_queue_len--;
-	    }
-	}
+	if (cd->tx_queue_len != 0)
+		cd->tx_queue_len--;
 #if 0
 	if ((cd->pbx_rd.frametype == AST_FRAME_DTMF) && 
 	    (FRAME_SUBCLASS(cd->pbx_rd.subclass) == 'f')) {
