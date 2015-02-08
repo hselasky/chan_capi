@@ -4167,8 +4167,7 @@ chan_capi_read_sub(struct call_desc *cd)
 	if (cd->state == CAPI_STATE_ONHOLD)
 	    goto done;
 
- repeat:
-	len = read(cd->fd[0], &cd->pbx_rd, sizeof(cd->pbx_rd));
+ 	len = read(cd->fd[0], &cd->pbx_rd, sizeof(cd->pbx_rd));
 
 	if (len < 0) {
 	    if (errno == EWOULDBLOCK || errno == EAGAIN || errno == EINTR)
