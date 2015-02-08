@@ -1527,14 +1527,7 @@ cd_pbx_write(struct call_desc *cd0, struct call_desc *cd1, struct ast_frame *f)
 static void
 cd_root_shrink(struct call_desc *cd)
 {
-    if (cd->pbx_dsp) {
-        ast_dsp_free(cd->pbx_dsp);
-        cd->pbx_dsp = NULL;
-    }
-
     free(cd);
-
-    return;
 }
 
 /*---------------------------------------------------------------------------*
@@ -1554,13 +1547,6 @@ cd_root_grow(struct cc_capi_application *p_app)
         memset(cd, 0, sizeof(*cd));
 
 	cd->p_app = p_app;
-
-	cd->pbx_dsp = ast_dsp_new();
-
-	if (cd->pbx_dsp == NULL) {
-	    cd_root_shrink(cd);
-	    return NULL;
-	}
 
 	cd->fd[0] = -1;
 	cd->fd[1] = -1;
@@ -2273,7 +2259,6 @@ cd_set_cep(struct call_desc *cd, struct config_entry_iface *cep)
 			     (cd->bchannelinfo[0] != 0)) ? 'D' : 'B';
 
     struct ast_channel *pbx_chan = cd->pbx_chan;
-    struct ast_dsp *pbx_dsp = cd->pbx_dsp;
 
     cc_mutex_assert(&cd->p_app->lock, MA_OWNED);
 
@@ -2314,113 +2299,8 @@ cd_set_cep(struct call_desc *cd, struct config_entry_iface *cep)
 	  CC_CHANNEL_SET_ACCOUNTCODE(pbx_chan, cep->accountcode);
 	  CC_CHANNEL_SET_LANGUAGE(pbx_chan, cep->language);
     }
-
-    /* configure DSP, if present */
-
-    if (pbx_dsp) {
-#ifdef CC_AST_DSP_SET_DIGITMODE
-	ast_dsp_set_features(pbx_dsp, DSP_FEATURE_DIGIT_DETECT);
-
-	if (cep->options.dtmf_detect_relax) {
-	    ast_dsp_set_digitmode(pbx_dsp, DSP_DIGITMODE_DTMF | 
-	        DSP_DIGITMODE_RELAXDTMF);
-	} else {
-	    ast_dsp_set_digitmode(pbx_dsp, DSP_DIGITMODE_DTMF);
-	}
-#else
-        ast_dsp_set_features(pbx_dsp, DSP_FEATURE_DTMF_DETECT);
-
-	if (cep->options.dtmf_detect_relax) {
-	    ast_dsp_digitmode(pbx_dsp, DSP_DIGITMODE_DTMF | 
-	        DSP_DIGITMODE_RELAXDTMF);
-	} else {
-	    ast_dsp_digitmode(pbx_dsp, DSP_DIGITMODE_DTMF);
-	}
-#endif
-
-    }
     return 0;
 }
-
-/*---------------------------------------------------------------------------*
- *      cd_detect_dtmf - detect DTMF digits in the sound
- *---------------------------------------------------------------------------*/
-#ifndef CC_AST_DSP_SET_DIGITMODE
-static void
-cd_detect_dtmf(struct call_desc *cd, int subclass, const void *__data, int len)
-{
-    struct ast_frame temp_fr;
-    uint8_t *input_data = (uint8_t *)__data;
-    uint16_t *short_data;
-    uint16_t x;
-    int digit;
-
-    /* convert all sound to short data */
-
-    switch(subclass) {
-    case AST_FORMAT_SLINEAR:
-        short_data = (void *)__data;
-	break;
-
-    case AST_FORMAT_ULAW:
-        short_data = alloca(len * 2);
-
-	for (x=0; x < len; x++) {
-	    short_data[x] = AST_MULAW(input_data[x]);
-	}
-	len = len * 2;
-	break;
-
-    case AST_FORMAT_ALAW:
-        short_data = alloca(len * 2);
-
-	for (x=0; x < len; x++) {
-	    short_data[x] = AST_ALAW(input_data[x]);
-	}
-	len = len * 2;
-	break;
-
-    default:
-        cd_log(cd, LOG_WARNING, "Unknown voice frame "
-	       "subclass: %d!\n", subclass);
-
-        short_data = NULL;
-	len = 0;
-	break;
-    }
-
-    memset(&temp_fr, 0, sizeof(temp_fr));
-
-    temp_fr.frametype = AST_FRAME_VOICE;
-    FRAME_SUBCLASS(temp_fr.subclass) = AST_FORMAT_SLINEAR;
-    _XPTR(temp_fr.data) = (void *)short_data;
-    temp_fr.datalen = len;
-    temp_fr.samples = len / 2;
-
-    digit = ast_dsp_digitdetect(cd->pbx_dsp, &temp_fr);
-
-    if ((cd->last_dtmf_digit != digit) && digit) {
-
-        memset(&temp_fr, 0, sizeof(temp_fr));
-
-	temp_fr.frametype = AST_FRAME_DTMF;
-	FRAME_SUBCLASS(temp_fr.subclass) = digit;
-
-        cd_verbose(cd, 1, 1, 3, "Detected DTMF "
-		   "digit: '%c'\n", digit);
-
-	len = write(cd->fd[1], &temp_fr, sizeof(temp_fr));
-
-	if (len < (int)sizeof(temp_fr)) {
-	    cd_log(cd, LOG_ERROR, "wrote %d bytes instead "
-		   "of %d bytes!\n", len, (uint32_t)sizeof(temp_fr));
-	} else {
-	    cd->tx_queue_len++;
-	}
-    }
-    cd->last_dtmf_digit = digit;
-}
-#endif
 
 /*---------------------------------------------------------------------------*
  *      cd_send_pbx_voice - send voice to the PBX via pipe
@@ -2452,17 +2332,6 @@ cd_send_pbx_voice(struct call_desc *cd, const void *data_ptr, int data_len)
 	       CC_CHANNEL_NAME(pbx_chan));
 	return -1;
     }
-
-#ifndef CC_AST_DSP_SET_DIGITMODE
-    if (cd->options.dtmf_detect_in_software &&
-	(cd->pbx_dsp != NULL)) {
-
-        cd_detect_dtmf(cd, 
-		       FRAME_SUBCLASS(temp_fr.subclass),
-		       _XPTR(temp_fr.data), 
-		       temp_fr.datalen);
-    }
-#endif
 
     if (cd->tx_queue_len < CAPI_MAX_QLEN) {
 	cd->rx_time_us += temp_fr.samples * 125;
@@ -2503,6 +2372,11 @@ cd_send_pbx_frame(struct call_desc *cd, int frametype, int subclass,
 
     if (frametype == AST_FRAME_VOICE) {
         return -1;
+    }
+
+    if (frametype == AST_FRAME_DTMF &&	
+	cd->options.dtmf_drop != 0) {
+	return (-1);
     }
 
     memset(&temp_fr, 0, sizeof(temp_fr));
@@ -8031,7 +7905,8 @@ capi_parse_iface_config(struct ast_variable *v, const char *name)
 	    CONF_GET_TRUE(v, cep->options.immediate, "immediate", 1);
 	    CONF_GET_TRUE(v, cep->options.bridge, "bridge", 1);
 	    CONF_GET_TRUE(v, cep->options.ntmode, "ntmode", 1);
-	    CONF_GET_TRUE(v, cep->options.dtmf_generate, "dtmf_generate", 1);
+	    CONF_GET_TRUE(v, cep->options.dtmf_generate, "dtmf_generate", 0);
+	    CONF_GET_TRUE(v, cep->options.dtmf_drop, "dtmf_drop", 0);
 	    CONF_GET_TRUE(v, cep->options.ton2digit, "ton2digit", 1);
 	    CONF_GET_TRUE(v, cep->options.late_callproc, "late_callproc", 1);
 
