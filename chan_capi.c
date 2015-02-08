@@ -2511,11 +2511,12 @@ cd_send_pbx_frame(struct call_desc *cd, int frametype, int subclass,
 
     if (len) {
       
-        _XPTR(temp_fr.data) = (char *)malloc(len+AST_FRIENDLY_OFFSET) +
-	    AST_FRIENDLY_OFFSET;
+	char *ptr = malloc(len+AST_FRIENDLY_OFFSET);
 
-	if (_XPTR(temp_fr.data)) {
-	    memcpy(_XPTR(temp_fr.data), data, len);
+	if (ptr != NULL) {
+	    ptr += AST_FRIENDLY_OFFSET;
+	    memcpy(ptr, data, len);
+	    _XPTR(temp_fr.data) = ptr;
 	    temp_fr.offset = AST_FRIENDLY_OFFSET;
 	    temp_fr.datalen = len;
 	    temp_fr.mallocd = AST_MALLOCD_DATA;
