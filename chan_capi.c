@@ -2585,16 +2585,15 @@ capi_check_wait_get_cmsg(struct cc_capi_application *p_app, _cmsg *CMSG)
 	cc_mutex_unlock(&p_app->lock);
 
 	error = capi20_waitformessage(p_app->application_id, &tv);
-	if (error == CAPI_ERROR_INVALID_APPLICATION_ID) {
+
+	if (error == CAPI_ERROR_INVALID_APPLICATION_ID)
 		capi_application_restart(p_app);
-		goto repeat;
-	}
 
 	cc_mutex_lock(&p_app->lock);
 
-	if (error == 0x0000) {
-	    goto repeat;
-	}
+	if (error == 0x0000 ||
+	    error == CAPI_ERROR_INVALID_APPLICATION_ID)
+		goto repeat;
 
 	if (error != 0x1104) {
 	    if (capi_global.debug) {

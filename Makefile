@@ -64,7 +64,10 @@ SHLIB_NAME=	chan_capi.so
 CFLAGS+=	-D_GNU_SOURCE
 CFLAGS+=	-D_REENTRANT
 CFLAGS+=	-DCRYPTO
+# check for Asterisk v11.x or newer
+.if exists(${INCLUDEDIR}/asterisk/ast_version.h)
 CFLAGS+=	-fblocks
+.endif
 
 MKLINT=		no
 WARNS=		3
