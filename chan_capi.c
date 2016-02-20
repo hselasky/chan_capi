@@ -774,7 +774,10 @@ cd_by_pbx_chan(struct ast_channel *pbx_chan);
 static int 
 cd_send_pbx_frame(struct call_desc *cd, int frametype, int subclass, 
 		  const void *data, int len);
-static uint8_t
+static void
+capi_usleep(uint32_t us);
+
+static void
 capi_application_usleep(struct cc_capi_application *p_app, uint32_t us);
 
 static int
@@ -1043,7 +1046,7 @@ capi_application_restart(struct cc_capi_application *p_app)
 
     do {
 		/* wait for calls to hang up */
-		capi_application_usleep(p_app, 1000000);
+		capi_usleep(1000000);
 
 		cc_mutex_lock(&capi_global_lock);
 		error = capi20_be_socket_configure(p_app->cbe_p,
@@ -1224,18 +1227,9 @@ capi_application_alloc(void)
     return NULL;
 }
 
-/*---------------------------------------------------------------------------*
- *      capi_application_usleep - sleep a CAPI application
- *---------------------------------------------------------------------------*/
-static uint8_t
-capi_application_usleep(struct cc_capi_application *p_app, uint32_t us)
+static void
+capi_usleep(uint32_t us)
 {
-    cc_mutex_assert(&p_app->lock, MA_OWNED);
-
-    p_app->sleep_count++;
-
-    cc_mutex_unlock(&p_app->lock);
-
     if (us >= 1000000) {
 
         sleep(us / 1000000);
@@ -1243,14 +1237,25 @@ capi_application_usleep(struct cc_capi_application *p_app, uint32_t us)
 	us %= 1000000;
     }
 
-    if (us) {
+    if (us)
+	usleep(us);
+}
 
-        usleep(us);
-    }
+/*---------------------------------------------------------------------------*
+ *      capi_application_usleep - sleep a CAPI application
+ *---------------------------------------------------------------------------*/
+static void
+capi_application_usleep(struct cc_capi_application *p_app, uint32_t us)
+{
+    cc_mutex_assert(&p_app->lock, MA_OWNED);
+
+    p_app->sleep_count++;
+
+    cc_mutex_unlock(&p_app->lock);
+    capi_usleep(us);
     cc_mutex_lock(&p_app->lock);
 
     p_app->sleep_count--;
-    return 0;
 }
 
 /*---------------------------------------------------------------------------*
@@ -6561,11 +6566,7 @@ chan_capi_cmd_receive_fax(struct call_desc *cd, struct call_desc *cd_unused,
 	}
 
 	while (cd->flags.fax_receiving || cd->flags.fax_pending) {
-
-	    if(capi_application_usleep(cd->p_app, 10000)) {
-
-	         break;
-	    }
+		capi_application_usleep(cd->p_app, 10000);
 	}
 
  done:
@@ -7143,9 +7144,7 @@ capi_get_supported_sservices(struct cc_capi_application *p_app,
 	p_app->temp_p_ctrl = p_ctrl;
 
 	while((p_app->received_facility_conf == 0) && --to) {
-
 	    capi_application_usleep(p_app, 10000);
-
 	}
 
 	p_app->temp_p_ctrl = NULL;
