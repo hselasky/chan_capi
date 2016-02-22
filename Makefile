@@ -65,6 +65,7 @@ CFLAGS+=	-D_GNU_SOURCE
 CFLAGS+=	-D_REENTRANT
 CFLAGS+=	-DCRYPTO
 CFLAGS+=	-fblocks
+CFLAGS+=	-fno-omit-frame-pointer
 
 MKLINT=		no
 WARNS=		3
