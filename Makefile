@@ -257,6 +257,14 @@ config.h: ${.CURDIR}/Makefile
 	@echo " * Not Found: devicestate.h"
 .endif
 
+.if exists(${INCLUDEDIR}/asterisk/format_compatibility.h)
+	@echo "#undef CC_AST_NO_FORMAT_COMPATIBILITY" >> ${CONFIGFILE}
+	@echo " * Found: format_compatibility.h"
+.else
+	@echo "#define CC_AST_NO_FORMAT_COMPATIBILITY" >> ${CONFIGFILE}
+	@echo " * Not Found: format_compatibility.h"
+.endif
+
 	@echo "#define ___CC_AST_VERSION(a,b) a##b" >> ${CONFIGFILE}
 	@echo "#define __CC_AST_VERSION(a,b) ___CC_AST_VERSION(a,b)" >> ${CONFIGFILE}
 

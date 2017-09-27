@@ -54,6 +54,9 @@
 #ifndef CC_AST_NO_DEVICESTATE
 #include <asterisk/devicestate.h>
 #endif
+#ifndef CC_AST_NO_FORMAT_COMPATIBILITY
+#include <asterisk/format_compatibility.h>
+#endif
 #ifdef CC_AST_MOH_PRESENT
 #include <asterisk/musiconhold.h>
 #endif
