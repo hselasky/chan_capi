@@ -3481,7 +3481,7 @@ chan_capi_request(const char *type, const struct ast_codec_pref *formats,
 	 * Allocate a PBX channel before allocating the CAPI channel,
 	 * while unlocked:
 	 */
-	pbx_chan = cd_alloc_pbx_channel(cep->name, dest);
+	pbx_chan = cd_alloc_pbx_channel("", dest);
 
 	/* have to lock the CAPI application first! */
 
