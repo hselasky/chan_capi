@@ -105,18 +105,6 @@ struct ring_buffer {
 /*
  * definitions for compatibility with older versions of ast*
  */
-#if (CC_AST_VERSION >= 0x130000)
-#define	CC_CHANNEL_SET_STATE(c,st) do {		\
-  ast_channel_lock(c);				\
-  ast_setstate(c, st);				\
-  ast_channel_unlock(c);			\
-} while (0)
-#else
-#define	CC_CHANNEL_SET_STATE(c,st) do {		\
-  ast_setstate(c, st);				\
-} while (0)
-#endif
-
 #if (CC_AST_VERSION >= 0x110000)
 #define CC_CHANNEL_NAME(chan) ast_channel_name(chan)
 #define	CC_CHANNEL_PVT(c) ast_channel_tech_pvt(c)

@@ -1977,7 +1977,7 @@ cd_free(struct call_desc *cd, uint8_t hangup_what)
         if (dir_outgoing) {
 	    cc_mutex_assert(&pbx_chan->lock, MA_OWNED);
 
-	    CC_CHANNEL_SET_STATE(pbx_chan, AST_STATE_DOWN);
+	    ast_setstate(pbx_chan, AST_STATE_DOWN);
 
 	    CC_CHANNEL_SET_HANGUPCAUSE(pbx_chan,
 	      ((wCause_in & 0xFF00) == 0x3400) ?
@@ -2268,7 +2268,7 @@ cd_alloc(struct cc_capi_application *p_app,
 	cd->flags.dir_outgoing = 1;
 	cd->msg_num = get_msg_num_dial(cd->p_app);
 
-	CC_CHANNEL_SET_STATE(pbx_chan, AST_STATE_RESERVED);
+	ast_setstate(pbx_chan, AST_STATE_RESERVED);
     }
     else
     {
@@ -2277,7 +2277,7 @@ cd_alloc(struct cc_capi_application *p_app,
         cd->state = CAPI_STATE_DID;
 	cd->flags.dir_outgoing = 0;
 
-	CC_CHANNEL_SET_STATE(pbx_chan, AST_STATE_DOWN);
+	ast_setstate(pbx_chan, AST_STATE_DOWN);
 
 	snprintf(buffer, sizeof(buffer), "%d", plci);
 	pbx_builtin_setvar_helper(pbx_chan, "PLCI", &buffer[0]);
@@ -3923,7 +3923,7 @@ chan_capi_call_sub(struct call_desc *cd, const char *idest, int timeout)
 	}
 
 	cd->state = CAPI_STATE_CONNECTPENDING;
-	CC_CHANNEL_SET_STATE(pbx_chan, AST_STATE_DIALING);
+	ast_setstate(pbx_chan, AST_STATE_DIALING);
 
 	CC_CHANNEL_SET_FLAG(pbx_chan, AST_FLAG_END_DTMF_ONLY);
 
@@ -4195,7 +4195,7 @@ chan_capi_answer_sub(struct call_desc *cd)
 
 	    cc_mutex_assert(&cd->pbx_chan->lock, MA_OWNED);
 
-	    CC_CHANNEL_SET_STATE(cd->pbx_chan, AST_STATE_UP);
+	    ast_setstate(cd->pbx_chan, AST_STATE_UP);
 
 	    /* copy in connected number, when the PBX 
 	     * has the channel locked:
@@ -5467,7 +5467,7 @@ capi_handle_connect_active_indication(_cmsg *CMSG, struct call_desc **pp_cd)
 		    cd->flags.pbx_state_up = 1;
 			/* special treatment for early B3 connects */
 #if (CC_AST_VERSION < 0x10400)
-			CC_CHANNEL_SET_STATE(cd->pbx_chan, AST_STATE_UP);
+			ast_setstate(cd->pbx_chan, AST_STATE_UP);
 #endif
 			cd_send_pbx_frame(cd, AST_FRAME_CONTROL, 
 					  AST_CONTROL_ANSWER, NULL, 0);
@@ -5520,7 +5520,7 @@ capi_handle_connect_b3_active_indication(_cmsg *CMSG, struct call_desc **pp_cd)
 	    (cd->flags.pbx_state_up == 0)) {
 		cd->flags.pbx_state_up = 1;
 #if (CC_AST_VERSION < 0x10400)
-		CC_CHANNEL_SET_STATE(cd->pbx_chan, AST_STATE_UP);
+		ast_setstate(cd->pbx_chan, AST_STATE_UP);
 #endif
 		cd_send_pbx_frame(cd, AST_FRAME_CONTROL, 
 				  AST_CONTROL_ANSWER, NULL, 0);
@@ -5846,7 +5846,7 @@ cd_start_pbx(struct call_desc **pp_cd, const char *exten)
 
 	cd_copy_telno_ext(cd, exten);
 
-	CC_CHANNEL_SET_STATE(pbx_chan, AST_STATE_RING);
+	ast_setstate(pbx_chan, AST_STATE_RING);
 
 	if (cd->flags.sending_complete_received ||
 	    (!cd->options.late_callproc)) {
