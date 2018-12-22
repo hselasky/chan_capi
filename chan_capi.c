@@ -2170,7 +2170,29 @@ cd_alloc(struct cc_capi_application *p_app,
 	ast_format_cap_append(CC_CHANNEL_NATIVEFORMATS(pbx_chan), ast_format_ulaw, 0);
     else
 	ast_format_cap_append(CC_CHANNEL_NATIVEFORMATS(pbx_chan), ast_format_alaw, 0);
-#elif (CC_AST_VERSION >= 0x100100)
+
+    ast_channel_tech_set(pbx_chan, &chan_capi_tech);
+
+    ast_pfmt = ast_format_cap_get_format(CC_CHANNEL_NATIVEFORMATS(pbx_chan), 0);
+
+    if (ast_pfmt == NULL || ast_pfmt == ast_format_none) {
+	if (ast_pfmt != NULL)
+		ao2_ref(ast_pfmt, -1);
+
+	if (fmt == AST_FORMAT_ULAW)
+		ast_pfmt = ast_format_ulaw;
+	else
+		ast_pfmt = ast_format_alaw;
+
+	ao2_ref(ast_pfmt, +1);
+    }
+
+    ast_set_read_format(pbx_chan, ast_pfmt);
+    ast_set_write_format(pbx_chan, ast_pfmt);
+
+    ao2_ref(ast_pfmt, -1);
+#else
+#if (CC_AST_VERSION >= 0x100100)
     ast_format_set(&ast_fmt, fmt, 0);
     ast_format_cap_add(CC_CHANNEL_NATIVEFORMATS(pbx_chan), &ast_fmt);
 #elif defined(CC_OLD_CODEC_FORMATS)
@@ -2180,19 +2202,6 @@ cd_alloc(struct cc_capi_application *p_app,
     ast_codec_pref_append(&CC_CHANNEL_NATIVEFORMATS(pbx_chan), fmt);
 #endif
 
-#if (CC_AST_VERSION >= 0x130000)
-    ast_channel_tech_set(pbx_chan, &chan_capi_tech);
-
-    ast_pfmt = ast_format_cap_get_format(ast_channel_nativeformats(pbx_chan), 0);
-    if (ast_pfmt == ast_format_none) {
-	if (fmt == AST_FORMAT_ULAW)
-		ast_pfmt = ast_format_ulaw;
-	else
-		ast_pfmt = ast_format_alaw;
-    }
-    ast_set_read_format(pbx_chan, ast_pfmt);
-    ast_set_write_format(pbx_chan, ast_pfmt);
-#else
 #if (CC_AST_VERSION >= 0x100100)
     ast_best_codec(CC_CHANNEL_NATIVEFORMATS(pbx_chan), &ast_fmt);
 #else
