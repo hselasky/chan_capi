@@ -2364,6 +2364,12 @@ cd_send_pbx_voice(struct call_desc *cd, const void *data_ptr, int data_len)
 
     temp_fr.frametype = AST_FRAME_VOICE;
     FRAME_SUBCLASS(temp_fr.subclass) = cd->pbx_capability;
+#if (CC_AST_VERSION >= 0x130000)
+    if (cd->pbx_capability == AST_FORMAT_ULAW)
+	temp_fr.subclass.format = ast_format_ulaw;
+    else
+	temp_fr.subclass.format = ast_format_alaw;
+#endif
     _XPTR(temp_fr.data) = (void *)data_ptr;
     temp_fr.datalen = data_len;
     temp_fr.samples = data_len;
