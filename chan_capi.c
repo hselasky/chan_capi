@@ -4318,12 +4318,25 @@ chan_capi_write_sub(struct call_desc *cd, struct ast_frame *frame)
 		goto done;
 	}
 
+#if (CC_AST_VERSION >= 0x130000)
+	if (cd->pbx_capability == AST_FORMAT_ULAW) {
+		if (frame->subclass.format != ast_format_ulaw) {
+			cc_log(LOG_ERROR, "dont know how to write non u-law data\n");
+			goto done;
+		}
+	} else {
+		if (frame->subclass.format != ast_format_alaw) {
+			cc_log(LOG_ERROR, "dont know how to write non a-law data\n");
+			goto done;
+		}
+	}
+#else
 	if (FRAME_SUBCLASS(frame->subclass) != cd->pbx_capability) {
 		cc_log(LOG_ERROR, "dont know how to write "
 		       "subclass %d\n", FRAME_SUBCLASS(frame->subclass));
 		goto done;
 	}
-
+#endif
 	if ((!_XPTR(frame->data)) || 
 	    (!frame->datalen)) {
 		cd_verbose(cd, 3, 0, 2, "No data for voice frame\n");
