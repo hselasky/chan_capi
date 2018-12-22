@@ -63,6 +63,11 @@
 #if (CC_AST_VERSION >= 0x10800)
 #include <asterisk/callerid.h>
 #endif
+#if (CC_AST_VERSION >= 0x130000)
+#include <asterisk/format.h>
+#include <asterisk/format_cap.h>
+#include <asterisk/format_cache.h>
+#endif
 #include <sys/time.h>
 #include <sys/signal.h>
 #include <stdlib.h>
@@ -2017,7 +2022,10 @@ cd_alloc_pbx_channel(const char *name, const char *dest)
 
     /* try to allocate a PBX channel */
 
-#if (CC_AST_VERSION >= 0x10800)
+#if (CC_AST_VERSION >= 0x130000)
+    pbx_chan = ast_channel_alloc(0, AST_STATE_DOWN, 0, 0, 
+        0, 0, 0, 0, 0, 0, "CAPI/%s/%s-free", name, dest);
+#elif (CC_AST_VERSION >= 0x10800)
     pbx_chan = ast_channel_alloc(0, AST_STATE_DOWN, 0, 0, 
 	0, 0, 0, 0, 0, "CAPI/%s/%s-free", name, dest);
 #elif (CC_AST_VERSION >= 0x10403)
@@ -2050,7 +2058,9 @@ cd_alloc(struct cc_capi_application *p_app,
     struct call_desc *cd = NULL;
     char buffer[16];
     int fds[2] = { 0, 0 };
-#if (CC_AST_VERSION >= 0x100100)
+#if (CC_AST_VERSION >= 0x130000)
+    struct ast_format *ast_pfmt;
+#elif (CC_AST_VERSION < 0x130000)
     struct ast_format ast_fmt;
 #endif
     int fmt;
@@ -2153,18 +2163,34 @@ cd_alloc(struct cc_capi_application *p_app,
 
     cd->pbx_capability            = fmt;
 
-#if (CC_AST_VERSION >= 0x100100)
+#if (CC_AST_VERSION >= 0x130000)
+    if (fmt == AST_FORMAT_ULAW)
+	ast_format_cap_append(CC_CHANNEL_NATIVEFORMATS(pbx_chan), ast_format_ulaw, 0);
+    else
+	ast_format_cap_append(CC_CHANNEL_NATIVEFORMATS(pbx_chan), ast_format_alaw, 0);
+#elif (CC_AST_VERSION >= 0x100100)
     ast_format_set(&ast_fmt, fmt, 0);
     ast_format_cap_add(CC_CHANNEL_NATIVEFORMATS(pbx_chan), &ast_fmt);
-#else
-#ifdef CC_OLD_CODEC_FORMATS
+#elif defined(CC_OLD_CODEC_FORMATS)
     CC_CHANNEL_SET_NATIVEFORMATS(pbx_chan, fmt);
 #else
     ast_codec_pref_init(&CC_CHANNEL_NATIVEFORMATS(pbx_chan));
     ast_codec_pref_append(&CC_CHANNEL_NATIVEFORMATS(pbx_chan), fmt);
 #endif
-#endif
 
+#if (CC_AST_VERSION >= 0x130000)
+    ast_channel_tech_set(pbx_chan, &chan_capi_tech);
+
+    ast_pfmt = ast_format_cap_get_format(ast_channel_nativeformats(pbx_chan), 0);
+    if (ast_pfmt == ast_format_none) {
+	if (fmt == AST_FORMAT_ULAW)
+		ast_pfmt = ast_format_ulaw;
+	else
+		ast_pfmt = ast_format_alaw;
+    }
+    ast_set_read_format(pbx_chan, ast_pfmt);
+    ast_set_write_format(pbx_chan, ast_pfmt);
+#else
 #if (CC_AST_VERSION >= 0x100100)
     ast_best_codec(CC_CHANNEL_NATIVEFORMATS(pbx_chan), &ast_fmt);
 #else
@@ -2208,6 +2234,7 @@ cd_alloc(struct cc_capi_application *p_app,
     }
     pbx_chan->pvt->rawreadformat  = fmt; /* XXX cleanup */
     pbx_chan->pvt->rawwriteformat = fmt; /* XXX cleanup */
+#endif
 #endif
 #endif
 #endif
@@ -3409,6 +3436,11 @@ parse_dialstring(char *buffer, const char **interface, const char **dest,
  * Prepare an outgoing call
  *---------------------------------------------------------------------------*/
 static struct ast_channel *
+#if (CC_AST_VERSION >= 0x130000)
+chan_capi_request(const char *type, struct ast_format_cap *format,
+    const struct ast_assigned_ids *assignedids, const struct ast_channel *requestor,
+    const char *data, int *cause)
+#else
 #if (CC_AST_VERSION >= 0x110000)
 chan_capi_request(const char *type, struct ast_format_cap *format,
     const struct ast_channel *requestor, const char *data, int *cause)
@@ -3430,6 +3462,7 @@ chan_capi_request(char *type, int format, void *data)
 #else
 chan_capi_request(const char *type, const struct ast_codec_pref *formats, 
 		  void *data, int *cause)
+#endif
 #endif
 #endif
 #endif
@@ -3560,7 +3593,9 @@ chan_capi_request(const char *type, const struct ast_codec_pref *formats,
 #if (CC_AST_VERSION >= 0x10400)
 		if (cd->chan_name[0] != 0) {
 			ast_change_name(pbx_chan, cd->chan_name);
+#if (CC_AST_VERSION < 0x130000)
 			ast_cdr_start(CC_CHANNEL_CDR(pbx_chan));
+#endif
 		}
 #endif
 		return (pbx_chan);
@@ -7617,7 +7652,9 @@ struct ast_channel_tech chan_capi_tech = {
 	.answer             = chan_capi_answer,
 	.read               = chan_capi_read,
 	.write              = chan_capi_write,
+#if (CC_AST_VERSION < 0x130000)
 	.bridge             = chan_capi_bridge,
+#endif
 	.exception          = NULL,
 	.indicate           = chan_capi_indicate,
 	.fixup              = chan_capi_fixup,
@@ -8256,15 +8293,24 @@ int load_module(void)
 	int error = 0;
 
 #if (CC_AST_VERSION >= 0x100100)
+#if (CC_AST_VERSION >= 0x130000)
+	chan_capi_tech.capabilities = ast_format_cap_alloc(AST_FORMAT_CAP_FLAG_DEFAULT);
+#else
 	chan_capi_tech.capabilities = ast_format_cap_alloc();
+#endif
 	if (chan_capi_tech.capabilities == NULL) {
 		return (AST_MODULE_LOAD_DECLINE);
 	} else {
+#if (CC_AST_VERSION >= 0x130000)
+		ast_format_cap_append(chan_capi_tech.capabilities, ast_format_alaw, 0);
+		ast_format_cap_append(chan_capi_tech.capabilities, ast_format_ulaw, 0);
+#else
 		struct ast_format fmt;
 		ast_format_set(&fmt, AST_FORMAT_ALAW, 0);
 		ast_format_cap_add(chan_capi_tech.capabilities, &fmt);
 		ast_format_set(&fmt, AST_FORMAT_ULAW, 0);
 		ast_format_cap_add(chan_capi_tech.capabilities, &fmt);
+#endif
 	}
 #endif
 
@@ -8513,7 +8559,9 @@ int unload_module(void)
 	    break;
 	}
 
-#if (CC_AST_VERSION >= 0x100100)
+#if (CC_AST_VERSION >= 0x130000)
+	ao2_ref(chan_capi_tech.capabilities, -1);
+#elif (CC_AST_VERSION >= 0x100100)
 	chan_capi_tech.capabilities =
 	    ast_format_cap_destroy(chan_capi_tech.capabilities);
 #endif

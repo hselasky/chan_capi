@@ -97,6 +97,8 @@ FILESDIR=${ETCDIR}
 
 CLEANFILES+= config.h
 
+ASTERISK_VERSION_NUM?= 110000
+
 config.h: ${.CURDIR}/Makefile
 	rm -f ${CONFIGFILE}
 	touch ${CONFIGFILE}
@@ -289,9 +291,9 @@ config.h: ${.CURDIR}/Makefile
 	echo " * Found: Asterisk version 10.1.x" ; \
 	)) || ( \
 	(([ -f ${INCLUDEDIR}/asterisk/ast_version.h ] && ( \
-	echo "#define CC_AST_VERSION __CC_AST_VERSION(0x,110000)" >> ${CONFIGFILE} ; \
+	echo "#define CC_AST_VERSION __CC_AST_VERSION(0x,${ASTERISK_VERSION_NUM})" >> ${CONFIGFILE} ; \
 	echo "#define CC_AST_NO_VERSION" >> ${CONFIGFILE} ; \
-	echo " * Found: Asterisk version 11.1.x or compatible" ; \
+	echo " * Found: Asterisk version ${ASTERISK_VERSION_NUM} or compatible" ; \
 	)) || ( \
 	echo " * Not Found: Asterisk version" ; \
 	exit 1 ; \
