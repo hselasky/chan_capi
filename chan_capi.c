@@ -2062,12 +2062,19 @@ cd_alloc(struct cc_capi_application *p_app,
     int fds[2] = { 0, 0 };
 #if (CC_AST_VERSION >= 0x130000)
     struct ast_format *ast_pfmt;
+    struct ast_format_cap *native;
 #elif (CC_AST_VERSION < 0x130000)
     struct ast_format ast_fmt;
 #endif
     int fmt;
 
     cc_mutex_assert(&p_app->lock, MA_OWNED);
+
+#if (CC_AST_VERSION >= 0x130000)
+    native = ast_format_cap_alloc(AST_FORMAT_CAP_FLAG_DEFAULT);
+    if (native == NULL)
+	return (NULL);
+#endif
 
     /* try to handle telephony storms nicely */
 
@@ -2167,30 +2174,17 @@ cd_alloc(struct cc_capi_application *p_app,
 
 #if (CC_AST_VERSION >= 0x130000)
     if (fmt == AST_FORMAT_ULAW)
-	ast_format_cap_append(CC_CHANNEL_NATIVEFORMATS(pbx_chan), ast_format_ulaw, 0);
+	ast_format_cap_append(native, ast_pfmt = ast_format_ulaw, 0);
     else
-	ast_format_cap_append(CC_CHANNEL_NATIVEFORMATS(pbx_chan), ast_format_alaw, 0);
+	ast_format_cap_append(native, ast_pfmt = ast_format_alaw, 0);
 
     ast_channel_tech_set(pbx_chan, &chan_capi_tech);
-
-    ast_pfmt = ast_format_cap_get_format(CC_CHANNEL_NATIVEFORMATS(pbx_chan), 0);
-
-    if (ast_pfmt == NULL || ast_pfmt == ast_format_none) {
-	if (ast_pfmt != NULL)
-		ao2_ref(ast_pfmt, -1);
-
-	if (fmt == AST_FORMAT_ULAW)
-		ast_pfmt = ast_format_ulaw;
-	else
-		ast_pfmt = ast_format_alaw;
-
-	ao2_ref(ast_pfmt, +1);
-    }
+    ast_channel_nativeformats_set(pbx_chan, native);
 
     ast_set_read_format(pbx_chan, ast_pfmt);
     ast_set_write_format(pbx_chan, ast_pfmt);
-
-    ao2_ref(ast_pfmt, -1);
+    ast_channel_set_rawwriteformat(pbx_chan, ast_pfmt);
+    ast_channel_set_rawreadformat(pbx_chan, ast_pfmt);
 #else
 #if (CC_AST_VERSION >= 0x100100)
     ast_format_set(&ast_fmt, fmt, 0);
