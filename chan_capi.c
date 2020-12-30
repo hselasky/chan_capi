@@ -1,5 +1,5 @@
 /*-
- * Copyright (c) 2006-2013 Hans Petter Selasky. All rights reserved.
+ * Copyright (c) 2006-2020 Hans Petter Selasky. All rights reserved.
  * Copyright (C) 2005 Cytronics & Melware, Armin Schindler
  * Copyright (C) 2002-2005 Junghanns.NET GmbH, Klaus-Peter Junghanns
  * 
@@ -5223,6 +5223,8 @@ capi_handle_facility_indication(_cmsg *CMSG, struct call_desc **pp_cd)
 		    } else {
 
 		        cd->state = CAPI_STATE_CONNECTED;
+			/* reset audio timestamp */
+			cd->audio_time_last = cd->p_app->application_uptime;
 			cd->flags.hold_is_active = 0;
 			cd_verbose(cd, 1, 1, 3, "Call retrieved\n");
 			capi_send_connect_b3_req(cd);
@@ -5353,6 +5355,9 @@ capi_handle_data_b3_indication(_cmsg *CMSG, struct call_desc **pp_cd)
 	if (len_curr == 0)
 		return;
 
+	/* set last audio timestamp */
+	cd->audio_time_last = cd->p_app->application_uptime;
+
 	if (cd->fax_file && cd->flags.fax_receiving) {
 
 		/* write data to FAX file */
@@ -5433,6 +5438,8 @@ capi_handle_connect_active_indication(_cmsg *CMSG, struct call_desc **pp_cd)
 	__capi_put_cmsg(cd->p_app, &CMSG2);
 	
 	cd->state = CAPI_STATE_CONNECTED;
+	/* reset audio timestamp */
+	cd->audio_time_last = cd->p_app->application_uptime;
 
 	date_time = CONNECT_ACTIVE_IND_DATE_TIME(CMSG);
 
@@ -5636,6 +5643,22 @@ capi_handle_disconnect_indication(_cmsg *CMSG, struct call_desc **pp_cd)
 	pp_cd[0] = cd;
 
 	return;
+}
+
+/*
+ * CAPI handle audio timeout
+ */
+static void
+capi_handle_audio_timeout(struct call_desc *cd)
+{
+	cd->state = CAPI_STATE_DISCONNECTED;
+	cd->wCause_in = CAPI_ERROR_B3_CARRIER_LOST;
+
+	capi_show_info(cd->wCause_in);
+
+	cd->flags.fax_error = 0;
+
+	cd_free(cd, 1);
 }
 
 static void
@@ -7097,6 +7120,18 @@ do_periodic(void *data)
 			    }
 			}
 
+			if (cd->pbx_chan && cd->hangup_chan == NULL &&
+			    cd->options.audio_time_out != 0 &&
+			    (cd->state == CAPI_STATE_CONNECTED)) {
+
+				/* computed time since last audio was received */
+
+				temp = p_app->application_uptime -
+				    cd->audio_time_last;
+				if (temp >= cd->options.audio_time_out)
+					capi_handle_audio_timeout(cd);
+			}
+
 			/* the following is here just to avoid deadlocks: */
 
 			if (cd->hangup_chan) {
@@ -7895,6 +7930,7 @@ capi_parse_iface_config(struct ast_variable *v, const char *name)
 	cep->rx_gain = capi_global.rx_gain;
 	cep->tx_gain = capi_global.tx_gain;
 	cep->options.digit_time_out = capi_global.digit_time_out;
+	cep->options.audio_time_out = capi_global.audio_time_out;
 	cep->options.ton2digit = capi_global.ton2digit;
 	strlcpy(cep->language, capi_global.default_language, sizeof(cep->language));
 
@@ -7928,6 +7964,7 @@ capi_parse_iface_config(struct ast_variable *v, const char *name)
 			     "wait_silence_samples");
 
 	    CONF_GET_INTEGER(v, cep->options.digit_time_out, "digit_timeout");
+	    CONF_GET_INTEGER(v, cep->options.audio_time_out, "audio_timeout");
 	    CONF_GET_INTEGER(v, cep->options.alert_time_out, "alert_timeout");
 
 #ifndef CC_AST_DSP_SET_DIGITMODE
@@ -8110,6 +8147,7 @@ chan_capi_parse_global_config(struct ast_variable *v,
 	cep->tx_gain = 1.0;
 	cep->capability = AST_FORMAT_ALAW;
 	cep->digit_time_out = 5; /* seconds */
+	cep->audio_time_out = 0; /* disabled */
 	cep->alert_time_out = 0; /* let kernel decide */
 
 	/* parse the general section */
@@ -8159,6 +8197,13 @@ chan_capi_parse_global_config(struct ast_variable *v,
 
 		if(cep->digit_time_out > 32) {
 		   cep->digit_time_out = 32; /* seconds */
+		}
+	    } else if (!strcasecmp(v->name, "audio_timeout")) {
+
+	        cep->audio_time_out = atoi(v->value);
+
+		if(cep->audio_time_out > 3600) {
+		   cep->audio_time_out = 3600; /* seconds */
 		}
 	    } else if (!strcasecmp(v->name, "alert_timeout")) {
 

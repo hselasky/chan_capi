@@ -131,4 +131,4 @@ digit_timeout=5  ;number of seconds to wait for additional digits
 ;late_callproc=1  ;Delay sending of call proceeding - wait for more digits
 		  ;This option is useful when bridging calls
 ;ton2digit=1	  ;Prefix destination phone number with international and
-
+;audio_timeout=30 ;Maximum number of seconds to wait for CAPI audio

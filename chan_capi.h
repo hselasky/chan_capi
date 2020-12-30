@@ -1,6 +1,6 @@
 /*-
  *
- * Copyright (c) 2006,2013 Hans Petter Selasky. All rights reserved.
+ * Copyright (c) 2006-2020 Hans Petter Selasky. All rights reserved.
  * Copyright (c) 2005 Cytronics & Melware, Armin Schindler
  * Copyright (c) 2002-2005 Junghanns.NET GmbH, Klaus-Peter Junghanns
  * 
@@ -417,6 +417,9 @@ struct cc_capi_options {
 	/* CAPI digit timeout, in seconds */
 	uint16_t digit_time_out;
 
+	/* CAPI audio timeout, in seconds */
+	uint16_t audio_time_out;
+
 	/* CAPI alert timeout, in seconds */
 	uint16_t alert_time_out;
 
@@ -443,6 +446,7 @@ struct config_entry_global {
 	float tx_gain;
 	int capability;
 	uint16_t digit_time_out; /* in seconds */
+	uint16_t audio_time_out; /* in seconds */
 	uint16_t alert_time_out; /* in seconds */
 	uint8_t ton2digit;
 };
@@ -558,6 +562,9 @@ struct call_desc {
 
 	/*! CAPI time alert was received */
 	uint32_t alert_time_last;
+
+	/*! CAPI time audio was received */
+	uint32_t audio_time_last;
 
 	/*! CAPI white noise generator remainder */
 	uint32_t white_noise_rem;
