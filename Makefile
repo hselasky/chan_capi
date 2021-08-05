@@ -67,12 +67,7 @@ CFLAGS+=	-DCRYPTO
 CFLAGS+=	-fblocks
 CFLAGS+=	-fno-omit-frame-pointer
 
-MKLINT=		no
-WARNS=		3
-
-NO_WERROR=
-NOGCCERROR=
-MK_PROFILE=	no
+WARNS=		0
 
 .if defined(HAVE_DEBUG)
 CFLAGS+=	-DHAVE_DEBUG
