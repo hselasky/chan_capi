@@ -1,12 +1,21 @@
-AUTHORS
-=======
+<IMG SRC="https://raw.githubusercontent.com/hselasky/chan_capi/main/www/chan_capi.jpg"></IMG>
 
-Hans Petter Selasky <hselasky@c2i.net>
+# ABOUT
+
+Chan-capi-hps is a channel driver for various open-source PBX systems like
+<A HREF="http://www.asterisk.org">Asterisk</A>, <A HREF="http://www.openpbx.org">OpenPBX</A>,
+<A HREF="http://www.callweaver.org">CallWeaver</A> and
+compatible. Chan-capi-hps allows you to connect your ISDN devices
+running in NT- and TE-mode to the above mentions PBX systems, using
+the <A HREF="http://www.capi.org/">CAPI2.0 standard</A>.
+
+# AUTHORS
+
+Hans Petter Selasky <hps@selasky.org>
 Armin Schindler <armin@melware.de>
 
+# DEBUGGERS, BUGFIXERS AND CONTRIBUTORS
 
-DEBUGGERS, BUGFIXERS AND CONTRIBUTORS
-=====================================
 Lele Forzani <lele@windmill.it>
 Florian Overkamp <florian@obsimref.com>
 Gareth Watts <gareth@omnipotent.net>
@@ -20,8 +29,7 @@ Klaus-Peter Junghanns <kpj@junghanns.net>
 ...and all the others that have been forgotten :-)
 
 
-FEATURES
-========
+# FEATURES
 
 - Incoming and outgoing calls
 - Overlap sending (dialtone and additional digits)
@@ -47,16 +55,13 @@ FEATURES
 * if supported by the CAPI controller
 
 
-SUPPORTED OPERATING SYSTEMS
-===========================
+# SUPPORTED OPERATING SYSTEMS
 
-Linux
-NetBSD
-FreeBSD
+- Linux
+- NetBSD
+- FreeBSD
 
-
-DEVICE PERMISSIONS
-==================
+# DEVICE PERMISSIONS
 
 OpenPBX.org, by default, runs as the non-root user/group
 openpbx/openpbx.  You must make sure that the /dev/capi* device files
@@ -64,14 +69,11 @@ are readable by OpenPBX.org either by changing the ownership or the
 permissions of the the device files or by running OpenPBX.org as root.
 
 
-EXAMPLE CONFIGURATION FILES
-===========================
+# EXAMPLE CONFIGURATION FILES
 
 See "capi.conf" and "extensions.conf"
 
-
-CAPI COMMAND APPLICATION
-========================
+# CAPI COMMAND APPLICATION
 
 See example "extensions.conf".
 
@@ -85,8 +87,8 @@ ECT:
         exten => s,3,Dial(CAPI/contr1/1234,60,M(capiect))
 
 
-Short HOWTO of capiCommand(receivefax|<filename>[|<stationid>|<headline>]):
-==========================================================================
+# Short HOWTO of capiCommand(receivefax|<filename>[|<stationid>|<headline>]):
+
 For those of you who have a CAPI card with an on-board DSP (like some Eicon and
 DIVA Server), this patch allows you to receive faxes.
 If you want to answer a channel in fax mode, use capicommand(receivefax|...)
@@ -96,7 +98,8 @@ fax tone, you can switch from voice to fax mode by calling capicommand(receivefa
 The parameter <filename> is mandatory and the parameters <stationid> and
 <headline> are optional.
 
-Example of use :
+Example of use:
+<PRE>
 line number 123, play something, if a fax tone is detected, handle it
 line number 124, answer directly in fax mode
 
@@ -110,6 +113,7 @@ exten => fax,1,Goto(handle_fax,s,1)
 exten => s,1,capicommand(receivefax|/tmp/${UNIQUEID}[|<stationid>|<headline>])
 exten => s,2,Hangup()
 exten => h,1,deadagi,fax.php // Run sfftobmp and mail it.
+</PRE>
 
 The output of capicommand(receivefax|...) is a SFF file.
 Use sfftobmp to convert it.
@@ -128,8 +132,7 @@ FAXID         : The ID of the remote fax maschine
 
 
 
-PBX VARIABLES USED/SET BY CHAN_CAPI
-===================================
+# PBX VARIABLES USED/SET BY CHAN_CAPI
 
 BCHANNELINFO
     On incomming call, this variable is set with the B-channel information value:
@@ -178,12 +181,32 @@ REDIRECTREASON
     If the incoming call was redirected to you, this variable is set
     with the reason value.
  
-
-
-Functions (available with newer Asterisk only)
-==============================================
+# Functions (available with newer Asterisk only)
 
 VANITYNUMBER(<vanitynumber>)
     Converts the 'vanitynumber' into a digit-only string. International keypad is
     used, e.g. ABC=1, DEF=2, ...
 
+# History
+
+<PRE>
+chan-capi (junghans.net)
+   |
+   |
+   |
+   v
+chan-capi-cm ---> chan-capi-hps
+   |                 |
+   v                 v
+</PRE>
+
+Chan-capi-hps is a complete rewrite of Chan-capi-cm, which author is
+Armin Schindler. Chan-capi-hps includes several enhancements for
+example the ability reload the "capi.conf" configuration file on the
+fly using the "capi reload" command. Chan-capi-cm can be obtained from
+<A HREF="http://www.chan-capi.org">http://www.chan-capi.org</A>. Bugs
+can be reported to <A HREF="mailto:hps&#x40;selasky.org">HPS</A>,
+<A HREF="mailto:freebsd-isdn&#x40;freebsd.org">freebsd-isdn&#x40;freebsd.org</A>
+or <A HREF="http://lists.melware.net/mailman/subscribe/chan-capi-users">http://lists.melware.net/mailman/listinfo/chan-capi-users</A>.
+
+--HPS
