@@ -11,22 +11,22 @@ the <A HREF="http://www.capi.org/">CAPI2.0 standard</A>.
 
 # AUTHORS
 
-Hans Petter Selasky <hps@selasky.org>
-Armin Schindler <armin@melware.de>
+- Hans Petter Selasky <hps@selasky.org>
+- Armin Schindler <armin@melware.de>
 
 # DEBUGGERS, BUGFIXERS AND CONTRIBUTORS
 
-Lele Forzani <lele@windmill.it>
-Florian Overkamp <florian@obsimref.com>
-Gareth Watts <gareth@omnipotent.net>
-Jeff Noxon <jeff@planetfall.com>
-Petr Michalek <petr.michalek@aca.cz>
-Jan Stocker <Jan.Stocker@t-online.de>
-Frank Sautter, levigo group
-Rob Thomas <xrobau@gmail.com>
-Klaus-Peter Junghanns <kpj@junghanns.net>
+- Lele Forzani <lele@windmill.it>
+- Florian Overkamp <florian@obsimref.com>
+- Gareth Watts <gareth@omnipotent.net>
+- Jeff Noxon <jeff@planetfall.com>
+- Petr Michalek <petr.michalek@aca.cz>
+- Jan Stocker <Jan.Stocker@t-online.de>
+- Frank Sautter, levigo group
+- Rob Thomas <xrobau@gmail.com>
+- Klaus-Peter Junghanns <kpj@junghanns.net>
 
-...and all the others that have been forgotten :-)
+- ...and all the others that have been forgotten :-)
 
 
 # FEATURES
@@ -68,7 +68,6 @@ openpbx/openpbx.  You must make sure that the /dev/capi* device files
 are readable by OpenPBX.org either by changing the ownership or the
 permissions of the the device files or by running OpenPBX.org as root.
 
-
 # EXAMPLE CONFIGURATION FILES
 
 See "capi.conf" and "extensions.conf"
@@ -77,6 +76,7 @@ See "capi.conf" and "extensions.conf"
 
 See example "extensions.conf".
 
+<PRE>
 ECT:
     Explicit call transfer of the call on hold (must put call on hold first!)
         [macro-capiect]
@@ -85,14 +85,14 @@ ECT:
         exten => s,1,capiCommand(hold)
         exten => s,2,Wait(1)
         exten => s,3,Dial(CAPI/contr1/1234,60,M(capiect))
-
+</PRE>
 
 # Short HOWTO of capiCommand(receivefax|<filename>[|<stationid>|<headline>]):
 
 For those of you who have a CAPI card with an on-board DSP (like some Eicon and
 DIVA Server), this patch allows you to receive faxes.
 If you want to answer a channel in fax mode, use capicommand(receivefax|...)
-instead of Answer()
+instead of Answer().
 If you use Answer(), you will be in voice mode. If the hardware DSP detects 
 fax tone, you can switch from voice to fax mode by calling capicommand(receivefax|...).
 The parameter <filename> is mandatory and the parameters <stationid> and
